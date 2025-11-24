@@ -125,7 +125,7 @@ export function useDeliveries() {
   }, [supabase])
 
   const addDeliveries = useCallback(
-    async (deliveriesData: Array<Omit<Delivery, 'id' | 'delivery_number' | 'created_at' | 'updated_at' | 'items'> & { items: Omit<DeliveryItem, 'id' | 'delivery_id'>[] }>) => {
+    async (deliveriesData: Array<Omit<Delivery, 'id' | 'delivery_number' | 'created_at' | 'updated_at' | 'items'> & { items: Omit<DeliveryItem, 'id' | 'delivery_id' | 'created_at'>[] }>) => {
       try {
         // Buscar nomes dos fornecedores
         const supplierIds = [...new Set(deliveriesData.map(d => d.supplier_id))]
