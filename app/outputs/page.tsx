@@ -16,24 +16,10 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 // Função para converter Output do Supabase para o formato esperado pelos componentes
 function convertOutput(output: OutputType): Output {
   // Garantir que output_date está no formato YYYY-MM-DD sem conversão de timezone
-  let outputDate: string
-  
-  if (output.output_date instanceof Date) {
-    const year = output.output_date.getFullYear()
-    const month = String(output.output_date.getMonth() + 1).padStart(2, '0')
-    const day = String(output.output_date.getDate()).padStart(2, '0')
-    outputDate = `${year}-${month}-${day}`
-  } else if (typeof output.output_date === 'string') {
-    outputDate = output.output_date.includes('T') 
-      ? output.output_date.split('T')[0] 
-      : output.output_date
-  } else {
-    const today = new Date()
-    const year = today.getFullYear()
-    const month = String(today.getMonth() + 1).padStart(2, '0')
-    const day = String(today.getDate()).padStart(2, '0')
-    outputDate = `${year}-${month}-${day}`
-  }
+  // output_date do Supabase sempre vem como string
+  const outputDate = typeof output.output_date === 'string' && output.output_date.includes('T')
+    ? output.output_date.split('T')[0]
+    : output.output_date || new Date().toISOString().split('T')[0]
 
   return {
     id: output.id,
@@ -41,8 +27,8 @@ function convertOutput(output: OutputType): Output {
     materialName: output.material_name,
     quantity: output.quantity,
     unit: output.unit,
-    institutionId: output.institution_id,
-    institutionName: output.institution_name,
+    institutionId: output.institution_id || undefined,
+    institutionName: output.institution_name || undefined,
     reason: output.reason,
     responsible: output.responsible,
     outputDate: outputDate,
@@ -82,12 +68,10 @@ export default function OutputsPage() {
     return supabaseInstitutions.map(i => ({
       id: i.id,
       name: i.name,
-      cnpj: i.cnpj,
       city: i.city,
       state: i.state,
       principalName: i.principal_name,
-      phone: i.phone,
-      email: i.email,
+      phone: i.phone || '',
       createdAt: i.created_at,
     }))
   }, [supabaseInstitutions])
