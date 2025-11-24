@@ -41,12 +41,10 @@ export function RequestTable({ requests, onDelete, onUpdateStatus, onGenerateRec
     return supabaseInstitutions.map(i => ({
       id: i.id,
       name: i.name,
-      cnpj: i.cnpj,
       city: i.city,
       state: i.state,
       principalName: i.principal_name,
       phone: i.phone,
-      email: i.email,
       createdAt: i.created_at,
     }))
   }, [supabaseInstitutions])
