@@ -1,6 +1,36 @@
 {
   "version": 3,
-  "middleware": {},
-  "sortedMiddleware": [],
+  "middleware": {
+    "/": {
+      "files": [
+        "server/edge/chunks/OneDrive_Desktop_CEDIME_22ebb5b6._.js",
+        "server/edge/chunks/4fbe4_@supabase_storage-js_dist_module_fc788099._.js",
+        "server/edge/chunks/4fbe4_@supabase_auth-js_dist_module_5bda992e._.js",
+        "server/edge/chunks/4fbe4_dd9067a9._.js",
+        "server/edge/chunks/[root-of-the-server]__718ec05d._.js",
+        "server/edge/chunks/turbopack-OneDrive_Desktop_CEDIME_edge-wrapper_dd52db83.js"
+      ],
+      "name": "middleware",
+      "page": "/",
+      "matchers": [
+        {
+          "regexp": "^(?:\\/(_next\\/data\\/[^/]{1,}))?(?:\\/((?!_next\\/static|_next\\/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*))(\\\\.json)?[\\/#\\?]?$",
+          "originalSource": "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"
+        }
+      ],
+      "wasm": [],
+      "assets": [],
+      "env": {
+        "__NEXT_BUILD_ID": "development",
+        "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY": "tFsS3O8XTPx+tXuLZu7CtlGh7OfGnnn27qQ3MZlMH8w=",
+        "__NEXT_PREVIEW_MODE_ID": "a781c999b3b7082672786b21ce413650",
+        "__NEXT_PREVIEW_MODE_ENCRYPTION_KEY": "99ecb95ba9d1fe892961fb29a6089bf2430d44da1bfabaedd278522e0fd7a72d",
+        "__NEXT_PREVIEW_MODE_SIGNING_KEY": "cfae466579b1b187a7a6454e011b7727c5a65d663bb4ad4a05c0ebd3fcf148f9"
+      }
+    }
+  },
+  "sortedMiddleware": [
+    "/"
+  ],
   "functions": {}
 }
