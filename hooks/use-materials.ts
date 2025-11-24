@@ -2,6 +2,17 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/hooks/use-toast'
 
+type MaterialUpdatedDetail = {
+  materialId?: string
+  reason?: string
+}
+
+declare global {
+  interface WindowEventMap {
+    materialUpdated: CustomEvent<MaterialUpdatedDetail>
+  }
+}
+
 export interface Material {
   id: string
   name: string
@@ -56,8 +67,8 @@ export function useMaterials() {
     fetchMaterials()
     
     // Escutar eventos de atualização de material para recarregar os dados
-    const handleMaterialUpdate = (event?: CustomEvent) => {
-      console.log('Evento materialUpdated recebido, recarregando materiais...', event?.detail)
+    const handleMaterialUpdate = (event: CustomEvent<MaterialUpdatedDetail>) => {
+      console.log('Evento materialUpdated recebido, recarregando materiais...', event.detail)
       // Adicionar um pequeno delay para garantir que o banco atualizou
       setTimeout(() => {
         fetchMaterials()
