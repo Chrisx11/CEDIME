@@ -41,10 +41,15 @@ export function RequestTable({ requests, onDelete, onUpdateStatus, onGenerateRec
     return supabaseInstitutions.map(i => ({
       id: i.id,
       name: i.name,
+      type: 'school' as const,
+      cnpj: '',
+      email: '',
+      phone: i.phone || '',
+      address: '',
       city: i.city,
       state: i.state,
       principalName: i.principal_name,
-      phone: i.phone,
+      status: i.status,
       createdAt: i.created_at,
     }))
   }, [supabaseInstitutions])
