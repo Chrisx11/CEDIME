@@ -44,7 +44,7 @@ export function RequestTable({ requests, onDelete, onUpdateStatus, onGenerateRec
       type: 'school' as const,
       cnpj: '',
       email: '',
-      phone: i.phone || '',
+      phone: (i.phone ?? '') || '',
       address: '',
       city: i.city,
       state: i.state,

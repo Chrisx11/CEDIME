@@ -66,7 +66,7 @@ export function RequestWizard({ isOpen, onClose, onSubmit }: RequestWizardProps)
       type: 'school' as const,
       cnpj: '',
       email: '',
-      phone: i.phone || '',
+      phone: (i.phone ?? '') || '',
       address: '',
       city: i.city,
       state: i.state,

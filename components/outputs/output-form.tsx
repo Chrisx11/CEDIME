@@ -92,7 +92,7 @@ export function OutputForm({ outputId, isOpen, onSubmit, onCancel }: OutputFormP
       city: i.city,
       state: i.state,
       principalName: i.principal_name,
-      phone: i.phone,
+      phone: i.phone ?? undefined,
       createdAt: i.created_at,
     }))
   }, [supabaseInstitutions])

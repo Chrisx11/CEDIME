@@ -36,7 +36,7 @@ export function InstitutionSelector({ isOpen, onClose, onSelect, excludeInstitut
       name: i.name,
       city: i.city,
       state: i.state,
-      phone: i.phone,
+      phone: i.phone ?? undefined,
     }))
   }, [supabaseInstitutions])
 
