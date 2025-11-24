@@ -548,78 +548,200 @@ export function exportExpensesByInstitutionsToPDF(
 
 export function exportExpensesByProductsToExcel(
   materials: { id: string; name: string }[],
-  expensesByMaterial: ExpenseData
+  expensesByMaterial: ExpenseData,
+  quantitiesByMaterial?: ExpenseData,
+  viewMode: 'values' | 'quantities' | 'complete' = 'values',
+  selectedInstitutionName?: string
 ) {
+  const formatQuantity = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(value)
+  }
+
   const data = materials.map(material => {
     const row: Record<string, string> = {
       'Produto': material.name,
     }
     
-    months.forEach((month, index) => {
-      const value = expensesByMaterial[material.id]?.[index] || 0
-      row[month] = formatCurrency(value)
-    })
-    
-    const total = Object.values(expensesByMaterial[material.id] || {}).reduce((sum, val) => sum + val, 0)
-    row['Total'] = formatCurrency(total)
+    if (viewMode === 'complete') {
+      months.forEach((month, index) => {
+        const qty = quantitiesByMaterial?.[material.id]?.[index] || 0
+        const value = expensesByMaterial[material.id]?.[index] || 0
+        row[`${month} - Qtd`] = formatQuantity(qty)
+        row[`${month} - Valor`] = formatCurrency(value)
+      })
+      
+      const totalQty = quantitiesByMaterial 
+        ? Object.values(quantitiesByMaterial[material.id] || {}).reduce((sum, val) => sum + val, 0)
+        : 0
+      const totalValue = Object.values(expensesByMaterial[material.id] || {}).reduce((sum, val) => sum + val, 0)
+      row['Total - Qtd'] = formatQuantity(totalQty)
+      row['Total - Valor'] = formatCurrency(totalValue)
+    } else if (viewMode === 'quantities') {
+      months.forEach((month, index) => {
+        const qty = quantitiesByMaterial?.[material.id]?.[index] || 0
+        row[month] = formatQuantity(qty)
+      })
+      
+      const total = quantitiesByMaterial
+        ? Object.values(quantitiesByMaterial[material.id] || {}).reduce((sum, val) => sum + val, 0)
+        : 0
+      row['Total'] = formatQuantity(total)
+    } else {
+      months.forEach((month, index) => {
+        const value = expensesByMaterial[material.id]?.[index] || 0
+        row[month] = formatCurrency(value)
+      })
+      
+      const total = Object.values(expensesByMaterial[material.id] || {}).reduce((sum, val) => sum + val, 0)
+      row['Total'] = formatCurrency(total)
+    }
     
     return row
   })
 
   const worksheet = XLSX.utils.json_to_sheet(data)
   const workbook = XLSX.utils.book_new()
+  
+  // Adicionar informações de filtro e modo se houver
+  const infoRows: string[][] = []
+  if (selectedInstitutionName) {
+    infoRows.push(['Filtro: Instituição - ' + selectedInstitutionName])
+  }
+  const modeLabel = viewMode === 'values' ? 'Valores' : viewMode === 'quantities' ? 'Quantidades' : 'Completo'
+  infoRows.push(['Modo de visualização: ' + modeLabel])
+  
+  if (infoRows.length > 0) {
+    XLSX.utils.sheet_add_aoa(worksheet, infoRows, { origin: -1 })
+  }
+  
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Despesas por Produto')
 
   // Ajustar largura das colunas
-  const colWidths = [
-    { wch: 30 }, // Produto
-    ...months.map(() => ({ wch: 12 })), // Meses
-    { wch: 15 }  // Total
-  ]
+  const colWidths = viewMode === 'complete'
+    ? [
+        { wch: 30 }, // Produto
+        ...months.flatMap(() => [{ wch: 12 }, { wch: 12 }]), // Qtd e Valor para cada mês
+        { wch: 12 }, // Total Qtd
+        { wch: 12 }  // Total Valor
+      ]
+    : [
+        { wch: 30 }, // Produto
+        ...months.map(() => ({ wch: 12 })), // Meses
+        { wch: 15 }  // Total
+      ]
   worksheet['!cols'] = colWidths
 
-  XLSX.writeFile(workbook, `despesas_produtos_${new Date().toISOString().split('T')[0]}.xlsx`)
+  const fileName = selectedInstitutionName
+    ? `despesas_produtos_${selectedInstitutionName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`
+    : `despesas_produtos_${new Date().toISOString().split('T')[0]}.xlsx`
+
+  XLSX.writeFile(workbook, fileName)
 }
 
 export function exportExpensesByProductsToPDF(
   materials: { id: string; name: string }[],
-  expensesByMaterial: ExpenseData
+  expensesByMaterial: ExpenseData,
+  quantitiesByMaterial?: ExpenseData,
+  viewMode: 'values' | 'quantities' | 'complete' = 'values',
+  selectedInstitutionName?: string
 ) {
+  const formatQuantity = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(value)
+  }
+
   const doc = new jsPDF('landscape', 'mm', 'a4')
   
   // Título
   doc.setFontSize(18)
   doc.text('Despesas por Produto - CEDIME', 14, 15)
   
-  // Data de geração
+  // Informações de filtro e modo
+  let yPos = 22
   doc.setFontSize(10)
-  doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`, 14, 22)
+  doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`, 14, yPos)
+  
+  if (selectedInstitutionName) {
+    yPos += 5
+    doc.text(`Filtro: Instituição - ${selectedInstitutionName}`, 14, yPos)
+  }
+  
+  yPos += 5
+  const modeLabel = viewMode === 'values' ? 'Valores' : viewMode === 'quantities' ? 'Quantidades' : 'Completo'
+  doc.text(`Modo de visualização: ${modeLabel}`, 14, yPos)
   
   // Tabela
-  const tableData = materials.map(material => {
-    const row = [material.name]
-    
-    months.forEach((month, index) => {
-      const value = expensesByMaterial[material.id]?.[index] || 0
-      row.push(formatCurrency(value))
-    })
-    
-    const total = Object.values(expensesByMaterial[material.id] || {}).reduce((sum, val) => sum + val, 0)
-    row.push(formatCurrency(total))
-    
-    return row
-  })
+  let headers: string[]
+  let tableData: (string | number)[][]
 
-  const headers = ['Produto', ...months, 'Total']
+  if (viewMode === 'complete') {
+    headers = ['Produto', ...months.flatMap(month => [`${month} - Qtd`, `${month} - Valor`]), 'Total - Qtd', 'Total - Valor']
+    tableData = materials.map(material => {
+      const row: (string | number)[] = [material.name]
+      
+      months.forEach((month, index) => {
+        const qty = quantitiesByMaterial?.[material.id]?.[index] || 0
+        const value = expensesByMaterial[material.id]?.[index] || 0
+        row.push(formatQuantity(qty))
+        row.push(formatCurrency(value))
+      })
+      
+      const totalQty = quantitiesByMaterial
+        ? Object.values(quantitiesByMaterial[material.id] || {}).reduce((sum, val) => sum + val, 0)
+        : 0
+      const totalValue = Object.values(expensesByMaterial[material.id] || {}).reduce((sum, val) => sum + val, 0)
+      row.push(formatQuantity(totalQty))
+      row.push(formatCurrency(totalValue))
+      
+      return row
+    })
+  } else if (viewMode === 'quantities') {
+    headers = ['Produto', ...months, 'Total']
+    tableData = materials.map(material => {
+      const row: (string | number)[] = [material.name]
+      
+      months.forEach((month, index) => {
+        const qty = quantitiesByMaterial?.[material.id]?.[index] || 0
+        row.push(formatQuantity(qty))
+      })
+      
+      const total = quantitiesByMaterial
+        ? Object.values(quantitiesByMaterial[material.id] || {}).reduce((sum, val) => sum + val, 0)
+        : 0
+      row.push(formatQuantity(total))
+      
+      return row
+    })
+  } else {
+    headers = ['Produto', ...months, 'Total']
+    tableData = materials.map(material => {
+      const row: (string | number)[] = [material.name]
+      
+      months.forEach((month, index) => {
+        const value = expensesByMaterial[material.id]?.[index] || 0
+        row.push(formatCurrency(value))
+      })
+      
+      const total = Object.values(expensesByMaterial[material.id] || {}).reduce((sum, val) => sum + val, 0)
+      row.push(formatCurrency(total))
+      
+      return row
+    })
+  }
 
   autoTable(doc, {
     head: [headers],
     body: tableData,
-    startY: 28,
-    styles: { fontSize: 7 },
+    startY: yPos + 5,
+    styles: { fontSize: viewMode === 'complete' ? 6 : 7 },
     headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [249, 250, 251] },
-    margin: { top: 28, left: 14, right: 14 }
+    margin: { top: yPos + 5, left: 14, right: 14 }
   })
 
   // Rodapé
@@ -635,6 +757,10 @@ export function exportExpensesByProductsToPDF(
     )
   }
 
-  doc.save(`despesas_produtos_${new Date().toISOString().split('T')[0]}.pdf`)
+  const fileName = selectedInstitutionName
+    ? `despesas_produtos_${selectedInstitutionName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`
+    : `despesas_produtos_${new Date().toISOString().split('T')[0]}.pdf`
+
+  doc.save(fileName)
 }
 

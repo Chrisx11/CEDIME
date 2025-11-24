@@ -1,9 +1,12 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import React from 'react'
 import { AuthLayout } from '@/components/auth-layout'
 import { useMaterials } from '@/hooks/use-materials'
 import { useEntries } from '@/hooks/use-entries'
+import { useInstitutions } from '@/hooks/use-institutions'
+import { useOutputs } from '@/hooks/use-outputs'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,7 +23,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { FileText, Download, FileSpreadsheet, File, Search } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { FileText, Download, FileSpreadsheet, File, Search, School, Eye, LayoutGrid } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { exportExpensesByProductsToExcel, exportExpensesByProductsToPDF } from '@/lib/export-utils'
 
@@ -42,54 +52,170 @@ const months = [
 export default function ExpensesProductsPage() {
   const { materials, isLoading: isLoadingMaterials } = useMaterials()
   const { entries, isLoading: isLoadingEntries } = useEntries()
+  const { institutions, isLoading: isLoadingInstitutions } = useInstitutions()
+  const { outputs, isLoading: isLoadingOutputs } = useOutputs()
   const [searchQuery, setSearchQuery] = useState('')
+  const [selectedInstitutionId, setSelectedInstitutionId] = useState<string>('all')
+  const [viewMode, setViewMode] = useState<'values' | 'quantities' | 'complete'>('values')
   const { toast } = useToast()
 
-  const isLoading = isLoadingMaterials || isLoadingEntries
+  const isLoading = isLoadingMaterials || isLoadingEntries || isLoadingInstitutions || isLoadingOutputs
 
-  const filteredMaterials = useMemo(() => {
-    if (!searchQuery || searchQuery.trim() === '') {
-      return materials
+  // Identificar produtos entregues para a instituição selecionada
+  const materialsByInstitution = useMemo(() => {
+    if (!selectedInstitutionId || selectedInstitutionId === 'all') {
+      return new Set<string>() // Se nenhuma instituição selecionada ou "all", retorna vazio (mostra todos)
     }
 
-    const query = searchQuery.trim().toLowerCase()
-    return materials.filter(material => {
-      const nameMatch = material.name.toLowerCase().includes(query)
-      const categoryMatch = material.category.toLowerCase().includes(query)
-      return nameMatch || categoryMatch
+    const materialIds = new Set<string>()
+    outputs.forEach(output => {
+      if (output.institution_id === selectedInstitutionId && output.material_id) {
+        materialIds.add(output.material_id)
+      }
     })
-  }, [materials, searchQuery])
+    return materialIds
+  }, [outputs, selectedInstitutionId])
+
+  const filteredMaterials = useMemo(() => {
+    let filtered = materials
+
+    // Filtrar por instituição se selecionada (e não for "all")
+    if (selectedInstitutionId && selectedInstitutionId !== 'all') {
+      filtered = filtered.filter(material => materialsByInstitution.has(material.id))
+    }
+
+    // Filtrar por busca de texto
+    if (searchQuery && searchQuery.trim() !== '') {
+      const query = searchQuery.trim().toLowerCase()
+      filtered = filtered.filter(material => {
+        const nameMatch = material.name.toLowerCase().includes(query)
+        const categoryMatch = material.category.toLowerCase().includes(query)
+        return nameMatch || categoryMatch
+      })
+    }
+
+    return filtered
+  }, [materials, searchQuery, selectedInstitutionId, materialsByInstitution])
 
 
-  // Calcular despesas por produto e mês (apenas entradas)
+  // Calcular despesas por produto e mês
+  // Se "Todas as Instituições": baseado em entradas
+  // Se instituição específica: baseado em saídas para aquela instituição
   const expensesByMaterial = useMemo(() => {
     const expenses: Record<string, Record<number, number>> = {}
     
-    // Processar apenas entradas
-    entries.forEach(entry => {
-      const date = new Date(entry.entry_date)
-      const month = date.getMonth() // 0-11
-      const year = date.getFullYear()
-      const currentYear = new Date().getFullYear()
-      
-      // Só considerar entradas do ano atual
-      if (year !== currentYear) return
-      
-      const value = entry.quantity * entry.unit_price
-      
-      if (!expenses[entry.material_id]) {
-        expenses[entry.material_id] = {}
-      }
-      
-      if (!expenses[entry.material_id][month]) {
-        expenses[entry.material_id][month] = 0
-      }
-      
-      expenses[entry.material_id][month] += value
-    })
+    // Se uma instituição específica estiver selecionada, usar SAÍDAS
+    if (selectedInstitutionId && selectedInstitutionId !== 'all') {
+      outputs.forEach(output => {
+        // Só considerar saídas para a instituição selecionada
+        if (output.institution_id !== selectedInstitutionId) return
+        
+        const date = new Date(output.output_date)
+        const month = date.getMonth() // 0-11
+        const year = date.getFullYear()
+        const currentYear = new Date().getFullYear()
+        
+        // Só considerar saídas do ano atual
+        if (year !== currentYear) return
+        
+        // Buscar preço unitário do material
+        const material = materials.find(m => m.id === output.material_id)
+        const unitPrice = material?.unit_price || 0
+        const value = output.quantity * unitPrice
+        
+        if (!expenses[output.material_id]) {
+          expenses[output.material_id] = {}
+        }
+        
+        if (!expenses[output.material_id][month]) {
+          expenses[output.material_id][month] = 0
+        }
+        
+        expenses[output.material_id][month] += value
+      })
+    } else {
+      // Se "Todas as Instituições", usar ENTRADAS
+      entries.forEach(entry => {
+        const date = new Date(entry.entry_date)
+        const month = date.getMonth() // 0-11
+        const year = date.getFullYear()
+        const currentYear = new Date().getFullYear()
+        
+        // Só considerar entradas do ano atual
+        if (year !== currentYear) return
+        
+        const value = entry.quantity * entry.unit_price
+        
+        if (!expenses[entry.material_id]) {
+          expenses[entry.material_id] = {}
+        }
+        
+        if (!expenses[entry.material_id][month]) {
+          expenses[entry.material_id][month] = 0
+        }
+        
+        expenses[entry.material_id][month] += value
+      })
+    }
     
     return expenses
-  }, [entries])
+  }, [entries, outputs, selectedInstitutionId, materials])
+
+  // Calcular quantidades por produto e mês
+  // Se "Todas as Instituições": baseado em entradas
+  // Se instituição específica: baseado em saídas para aquela instituição
+  const quantitiesByMaterial = useMemo(() => {
+    const quantities: Record<string, Record<number, number>> = {}
+    
+    // Se uma instituição específica estiver selecionada, usar SAÍDAS
+    if (selectedInstitutionId && selectedInstitutionId !== 'all') {
+      outputs.forEach(output => {
+        // Só considerar saídas para a instituição selecionada
+        if (output.institution_id !== selectedInstitutionId) return
+        
+        const date = new Date(output.output_date)
+        const month = date.getMonth() // 0-11
+        const year = date.getFullYear()
+        const currentYear = new Date().getFullYear()
+        
+        // Só considerar saídas do ano atual
+        if (year !== currentYear) return
+        
+        if (!quantities[output.material_id]) {
+          quantities[output.material_id] = {}
+        }
+        
+        if (!quantities[output.material_id][month]) {
+          quantities[output.material_id][month] = 0
+        }
+        
+        quantities[output.material_id][month] += output.quantity
+      })
+    } else {
+      // Se "Todas as Instituições", usar ENTRADAS
+      entries.forEach(entry => {
+        const date = new Date(entry.entry_date)
+        const month = date.getMonth() // 0-11
+        const year = date.getFullYear()
+        const currentYear = new Date().getFullYear()
+        
+        // Só considerar entradas do ano atual
+        if (year !== currentYear) return
+        
+        if (!quantities[entry.material_id]) {
+          quantities[entry.material_id] = {}
+        }
+        
+        if (!quantities[entry.material_id][month]) {
+          quantities[entry.material_id][month] = 0
+        }
+        
+        quantities[entry.material_id][month] += entry.quantity
+      })
+    }
+    
+    return quantities
+  }, [entries, outputs, selectedInstitutionId])
 
   // Função para formatar valor em reais
   const formatCurrency = (value: number) => {
@@ -106,11 +232,31 @@ export default function ExpensesProductsPage() {
     return expensesByMaterial[materialId]?.[monthIndex] || 0
   }
 
-  // Função para calcular total do produto
+  // Função para obter quantidade do mês
+  const getMonthQuantity = (materialId: string, monthIndex: number) => {
+    return quantitiesByMaterial[materialId]?.[monthIndex] || 0
+  }
+
+  // Função para calcular total do produto (valor)
   const getTotalValue = (materialId: string) => {
     const materialExpenses = expensesByMaterial[materialId]
     if (!materialExpenses) return 0
     return Object.values(materialExpenses).reduce((sum, value) => sum + value, 0)
+  }
+
+  // Função para calcular total do produto (quantidade)
+  const getTotalQuantity = (materialId: string) => {
+    const materialQuantities = quantitiesByMaterial[materialId]
+    if (!materialQuantities) return 0
+    return Object.values(materialQuantities).reduce((sum, qty) => sum + qty, 0)
+  }
+
+  // Função para formatar quantidade
+  const formatQuantity = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(value)
   }
 
   if (isLoading) {
@@ -142,6 +288,44 @@ export default function ExpensesProductsPage() {
               autoComplete="off"
             />
           </div>
+          <Select value={selectedInstitutionId || 'all'} onValueChange={setSelectedInstitutionId}>
+            <SelectTrigger className="w-[250px]">
+              <School className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Todas as instituições" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as instituições</SelectItem>
+              {institutions.map((institution) => (
+                <SelectItem key={institution.id} value={institution.id}>
+                  {institution.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="font-medium">
+                <Eye className="h-4 w-4 mr-2" />
+                {viewMode === 'values' && 'Mostrar Valores'}
+                {viewMode === 'quantities' && 'Mostrar Quantidade'}
+                {viewMode === 'complete' && 'Completo'}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setViewMode('values')}>
+                <FileText className="h-4 w-4 mr-2" />
+                Mostrar Valores
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setViewMode('quantities')}>
+                <LayoutGrid className="h-4 w-4 mr-2" />
+                Mostrar Quantidade
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setViewMode('complete')}>
+                <LayoutGrid className="h-4 w-4 mr-2" />
+                Completo
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="font-medium">
@@ -153,9 +337,16 @@ export default function ExpensesProductsPage() {
             <DropdownMenuContent align="end">
               <DropdownMenuItem
                 onClick={() => {
+                  const selectedInstitution = selectedInstitutionId && selectedInstitutionId !== 'all'
+                    ? institutions.find(i => i.id === selectedInstitutionId)
+                    : undefined
+                  
                   exportExpensesByProductsToExcel(
                     filteredMaterials.map(m => ({ id: m.id, name: m.name })),
-                    expensesByMaterial
+                    expensesByMaterial,
+                    quantitiesByMaterial,
+                    viewMode,
+                    selectedInstitution?.name
                   )
                   toast({
                     title: 'Exportação concluída',
@@ -168,9 +359,16 @@ export default function ExpensesProductsPage() {
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {
+                  const selectedInstitution = selectedInstitutionId && selectedInstitutionId !== 'all'
+                    ? institutions.find(i => i.id === selectedInstitutionId)
+                    : undefined
+                  
                   exportExpensesByProductsToPDF(
                     filteredMaterials.map(m => ({ id: m.id, name: m.name })),
-                    expensesByMaterial
+                    expensesByMaterial,
+                    quantitiesByMaterial,
+                    viewMode,
+                    selectedInstitution?.name
                   )
                   toast({
                     title: 'Exportação concluída',
@@ -190,21 +388,66 @@ export default function ExpensesProductsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="min-w-[200px] text-sm">Produto</TableHead>
-                  {months.map((month) => (
-                    <TableHead key={month} className="text-center min-w-[60px] px-2 text-xs">
-                      {month}
+                  {months.map((month) => {
+                    if (viewMode === 'complete') {
+                      return (
+                        <TableHead key={month} colSpan={2} className="text-center min-w-[120px] px-2 text-xs border-x">
+                          {month}
+                        </TableHead>
+                      )
+                    }
+                    return (
+                      <TableHead key={month} className="text-center min-w-[60px] px-2 text-xs">
+                        {month}
+                      </TableHead>
+                    )
+                  })}
+                  {viewMode === 'complete' ? (
+                    <TableHead colSpan={2} className="text-center min-w-[120px] font-semibold px-2 text-xs">
+                      Total
                     </TableHead>
-                  ))}
-                  <TableHead className="text-center min-w-[80px] font-semibold px-2 text-xs">Total</TableHead>
+                  ) : (
+                    <TableHead className="text-center min-w-[80px] font-semibold px-2 text-xs">
+                      Total
+                    </TableHead>
+                  )}
                 </TableRow>
+                {viewMode === 'complete' && (
+                  <TableRow>
+                    <TableHead className="min-w-[200px] text-sm"></TableHead>
+                    {months.map((month) => (
+                      <React.Fragment key={month}>
+                        <TableHead className="text-center min-w-[60px] px-2 text-xs text-muted-foreground border-x">
+                          Qtd
+                        </TableHead>
+                        <TableHead className="text-center min-w-[60px] px-2 text-xs text-muted-foreground">
+                          Valor
+                        </TableHead>
+                      </React.Fragment>
+                    ))}
+                    <TableHead className="text-center min-w-[60px] px-2 text-xs text-muted-foreground border-x">
+                      Qtd
+                    </TableHead>
+                    <TableHead className="text-center min-w-[60px] px-2 text-xs text-muted-foreground">
+                      Valor
+                    </TableHead>
+                  </TableRow>
+                )}
               </TableHeader>
               <TableBody>
                 {filteredMaterials.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center text-muted-foreground py-8">
-                      {searchQuery.trim() !== '' 
-                        ? `Nenhum produto encontrado com o termo "${searchQuery}"`
-                        : 'Nenhum produto cadastrado'}
+                    <TableCell 
+                      colSpan={viewMode === 'complete' ? 26 : 14} 
+                      className="text-center text-muted-foreground py-8"
+                    >
+                      {selectedInstitutionId && selectedInstitutionId !== 'all'
+                        ? searchQuery.trim() !== ''
+                          ? `Nenhum produto encontrado para a instituição selecionada com o termo "${searchQuery}"`
+                          : 'Nenhum produto entregue para a instituição selecionada'
+                        : searchQuery.trim() !== ''
+                          ? `Nenhum produto encontrado com o termo "${searchQuery}"`
+                          : 'Nenhum produto cadastrado'}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -213,14 +456,50 @@ export default function ExpensesProductsPage() {
                       <TableCell className="font-medium text-sm">
                         {material.name}
                       </TableCell>
-                      {months.map((month, index) => (
-                        <TableCell key={month} className="text-center px-2 text-xs">
-                          {formatCurrency(getMonthValue(material.id, index))}
+                      {months.map((month, index) => {
+                        if (viewMode === 'complete') {
+                          return (
+                            <React.Fragment key={month}>
+                              <TableCell className="text-center px-2 text-xs border-x">
+                                {formatQuantity(getMonthQuantity(material.id, index))}
+                              </TableCell>
+                              <TableCell className="text-center px-2 text-xs">
+                                {formatCurrency(getMonthValue(material.id, index))}
+                              </TableCell>
+                            </React.Fragment>
+                          )
+                        } else if (viewMode === 'quantities') {
+                          return (
+                            <TableCell key={month} className="text-center px-2 text-xs">
+                              {formatQuantity(getMonthQuantity(material.id, index))}
+                            </TableCell>
+                          )
+                        } else {
+                          return (
+                            <TableCell key={month} className="text-center px-2 text-xs">
+                              {formatCurrency(getMonthValue(material.id, index))}
+                            </TableCell>
+                          )
+                        }
+                      })}
+                      {viewMode === 'complete' ? (
+                        <>
+                          <TableCell className="text-center font-semibold px-2 text-xs border-x">
+                            {formatQuantity(getTotalQuantity(material.id))}
+                          </TableCell>
+                          <TableCell className="text-center font-semibold px-2 text-xs">
+                            {formatCurrency(getTotalValue(material.id))}
+                          </TableCell>
+                        </>
+                      ) : viewMode === 'quantities' ? (
+                        <TableCell className="text-center font-semibold px-2 text-xs">
+                          {formatQuantity(getTotalQuantity(material.id))}
                         </TableCell>
-                      ))}
-                      <TableCell className="text-center font-semibold px-2 text-xs">
-                        {formatCurrency(getTotalValue(material.id))}
-                      </TableCell>
+                      ) : (
+                        <TableCell className="text-center font-semibold px-2 text-xs">
+                          {formatCurrency(getTotalValue(material.id))}
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))
                 )}

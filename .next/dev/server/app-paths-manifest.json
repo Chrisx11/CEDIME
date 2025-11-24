@@ -1,3 +1,10 @@
 {
-  "/institutions/page": "app/institutions/page.js"
+  "/dashboard/page": "app/dashboard/page.js",
+  "/entries/page": "app/entries/page.js",
+  "/expenses-institutions/page": "app/expenses-institutions/page.js",
+  "/expenses-products/page": "app/expenses-products/page.js",
+  "/login/page": "app/login/page.js",
+  "/materials/page": "app/materials/page.js",
+  "/outputs/page": "app/outputs/page.js",
+  "/page": "app/page.js"
 }
