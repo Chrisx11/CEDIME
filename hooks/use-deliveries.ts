@@ -198,7 +198,7 @@ export function useDeliveries() {
         }
 
         // Inserir itens de todas as entregas
-        const allItems: Array<Omit<DeliveryItem, 'id'>> = []
+        const allItems: Array<Omit<DeliveryItem, 'id' | 'created_at'>> = []
         for (const [index, delivery] of (insertedDeliveries || []).entries()) {
           const originalDeliveryData = deliveriesToInsert[index]
           for (const item of originalDeliveryData.items) {
