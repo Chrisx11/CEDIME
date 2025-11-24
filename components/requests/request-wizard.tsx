@@ -1,7 +1,10 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { useData, Material, Institution } from '@/lib/data-context'
+import { Material, Institution } from '@/lib/data-context'
+import { useMaterials } from '@/hooks/use-materials'
+import { useInstitutions } from '@/hooks/use-institutions'
+import { useCategories } from '@/hooks/use-categories'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -11,8 +14,10 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
-import { FileText, ChevronRight, ChevronLeft, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { FileText, ChevronRight, ChevronLeft, CheckCircle2, AlertTriangle, Package, School } from 'lucide-react'
 import { Card } from '@/components/ui/card'
+import { MaterialQuantitySelector } from '@/components/ui/material-quantity-selector'
+import { InstitutionMultiSelector } from '@/components/ui/institution-multi-selector'
 
 interface RequestWizardProps {
   isOpen: boolean
@@ -35,14 +40,61 @@ interface RequestWizardProps {
 type Step = 1 | 2 | 3 | 4
 
 export function RequestWizard({ isOpen, onClose, onSubmit }: RequestWizardProps) {
-  const { materials, institutions, customCategories } = useData()
+  const { materials: supabaseMaterials } = useMaterials()
+  const { institutions: supabaseInstitutions } = useInstitutions()
+  const { categories: supabaseCategories } = useCategories()
   const { toast } = useToast()
+
+  // Converter materiais e instituições para o formato esperado
+  const materials = useMemo(() => {
+    return supabaseMaterials.map(m => ({
+      id: m.id,
+      name: m.name,
+      category: m.category,
+      unit: m.unit,
+      quantity: m.quantity,
+      minQuantity: m.min_quantity,
+      unitPrice: m.unit_price,
+      lastUpdate: m.last_update,
+    }))
+  }, [supabaseMaterials])
+
+  const institutions = useMemo(() => {
+    return supabaseInstitutions.map(i => ({
+      id: i.id,
+      name: i.name,
+      cnpj: i.cnpj,
+      city: i.city,
+      state: i.state,
+      principalName: i.principal_name,
+      phone: i.phone,
+      email: i.email,
+      createdAt: i.created_at,
+    }))
+  }, [supabaseInstitutions])
+
+  const customCategories = useMemo(() => {
+    return supabaseCategories.map(c => c.name)
+  }, [supabaseCategories])
+
+  // Funções auxiliares para compatibilidade (usadas em outros lugares)
+  const getMaterialStock = (materialId: string) => {
+    const material = materials.find(m => m.id === materialId)
+    return material ? material.quantity : 0
+  }
+
+  const getMaterialAveragePrice = (materialId: string) => {
+    const material = materials.find(m => m.id === materialId)
+    return material ? material.unitPrice : 0
+  }
   
   const [currentStep, setCurrentStep] = useState<Step>(1)
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [selectedMaterials, setSelectedMaterials] = useState<Record<string, number>>({})
   const [selectedInstitutions, setSelectedInstitutions] = useState<string[]>([])
   const [requiredDate, setRequiredDate] = useState(new Date().toISOString().split('T')[0])
+  const [isMaterialSelectorOpen, setIsMaterialSelectorOpen] = useState(false)
+  const [isInstitutionSelectorOpen, setIsInstitutionSelectorOpen] = useState(false)
 
   // Apenas categorias customizadas
   const allCategories = customCategories.map(cat => ({ value: cat, label: cat }))
@@ -77,27 +129,29 @@ export function RequestWizard({ isOpen, onClose, onSubmit }: RequestWizardProps)
     selectedCategoriesRef.current = selectedCategories
   }, [selectedCategories])
 
-  // Inicializar materiais selecionados com quantidade 0 apenas quando entrar no passo 2
+  // Limpar seleções de materiais quando mudar de categoria (mas manter os já selecionados)
   useEffect(() => {
     if (currentStep === 2 && selectedCategoriesRef.current.length > 0) {
-      // Filtra materiais usando refs para evitar dependências de arrays
-      const filteredMaterials = materialsRef.current.filter(m => 
-        selectedCategoriesRef.current.includes(m.category)
-      )
-      
-      if (filteredMaterials.length > 0) {
-        // Verifica se precisa atualizar comparando com a última string processada
-        if (availableMaterialIdsString !== lastProcessedIdsRef.current) {
-          setSelectedMaterials(prev => {
-            const initialMaterials: Record<string, number> = {}
-            filteredMaterials.forEach(material => {
-              // Mantém a quantidade existente se o material já estava selecionado
-              initialMaterials[material.id] = prev[material.id] ?? 0
-            })
-            lastProcessedIdsRef.current = availableMaterialIdsString
-            return initialMaterials
+      // Verifica se precisa atualizar comparando com a última string processada
+      if (availableMaterialIdsString !== lastProcessedIdsRef.current) {
+        setSelectedMaterials(prev => {
+          // Remove materiais que não estão mais nas categorias selecionadas
+          const filteredMaterials = materialsRef.current.filter(m => 
+            selectedCategoriesRef.current.includes(m.category)
+          )
+          const filteredIds = new Set(filteredMaterials.map(m => m.id))
+          
+          const cleanedMaterials: Record<string, number> = {}
+          Object.keys(prev).forEach(materialId => {
+            // Mantém apenas os materiais que ainda estão nas categorias selecionadas e com quantidade > 0
+            if (filteredIds.has(materialId) && prev[materialId] > 0) {
+              cleanedMaterials[materialId] = prev[materialId]
+            }
           })
-        }
+          
+          lastProcessedIdsRef.current = availableMaterialIdsString
+          return cleanedMaterials
+        })
       }
     }
   }, [currentStep, availableMaterialIdsString]) // Apenas dependências primitivas
@@ -143,6 +197,14 @@ export function RequestWizard({ isOpen, onClose, onSubmit }: RequestWizardProps)
     }))
   }
 
+  const handleMaterialSelectorConfirm = (selections: Record<string, number>) => {
+    setSelectedMaterials(selections)
+  }
+
+  const handleInstitutionSelectorConfirm = (selectedIds: string[]) => {
+    setSelectedInstitutions(selectedIds)
+  }
+
   const handleInstitutionToggle = (institutionId: string) => {
     setSelectedInstitutions(prev =>
       prev.includes(institutionId)
@@ -164,7 +226,7 @@ export function RequestWizard({ isOpen, onClose, onSubmit }: RequestWizardProps)
     
     activeMaterials.forEach(material => {
       const requested = selectedMaterials[material.id] || 0
-      const available = material.quantity
+      const available = getMaterialStock(material.id)
       const totalRequested = requested * selectedInstitutions.length
       
       if (totalRequested > available) {
@@ -177,7 +239,7 @@ export function RequestWizard({ isOpen, onClose, onSubmit }: RequestWizardProps)
     })
     
     return issues
-  }, [currentStep, activeMaterials, selectedMaterials, selectedInstitutions])
+  }, [currentStep, activeMaterials, selectedMaterials, selectedInstitutions, getMaterialStock])
 
   const handleNext = () => {
     if (currentStep === 1) {
@@ -231,13 +293,17 @@ export function RequestWizard({ isOpen, onClose, onSubmit }: RequestWizardProps)
 
     // Criar requisições para cada instituição
     const requests = selectedInstitutions.map(institutionId => {
-      const items = activeMaterials.map(material => ({
-        materialId: material.id,
-        materialName: material.name,
-        quantity: selectedMaterials[material.id],
-        unitPrice: material.unitPrice,
-        total: selectedMaterials[material.id] * material.unitPrice
-      }))
+      const items = activeMaterials.map(material => {
+        const quantity = selectedMaterials[material.id]
+        const unitPrice = getMaterialAveragePrice(material.id)
+        return {
+          materialId: material.id,
+          materialName: material.name,
+          quantity: quantity,
+          unitPrice: unitPrice,
+          total: quantity * unitPrice
+        }
+      })
 
       const totalValue = items.reduce((acc, item) => acc + item.total, 0)
 
@@ -349,30 +415,40 @@ export function RequestWizard({ isOpen, onClose, onSubmit }: RequestWizardProps)
           {/* Passo 2: Seleção de Materiais */}
           {currentStep === 2 && (
             <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Selecione os materiais e defina as quantidades. Desmarque os que não serão utilizados.
-              </p>
-              <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                {availableMaterials.map(material => {
-                  const quantity = selectedMaterials[material.id] || 0
-                  const isSelected = quantity > 0
-                  
-                  return (
-                    <Card
-                      key={material.id}
-                      className={`p-4 transition-all ${
-                        isSelected
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border'
-                      }`}
-                    >
-                      <div className="flex items-center gap-4">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => handleMaterialToggle(material.id)}
-                          className="w-4 h-4"
-                        />
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {activeMaterials.length > 0 
+                    ? 'Materiais selecionados. Você pode editar as quantidades ou remover itens.'
+                    : 'Clique no botão abaixo para selecionar os materiais e definir as quantidades.'}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsMaterialSelectorOpen(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Package className="h-4 w-4" />
+                  {activeMaterials.length > 0 ? 'Editar Seleção' : 'Selecionar Materiais'}
+                </Button>
+              </div>
+              {activeMaterials.length > 0 ? (
+                <>
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                    {activeMaterials.map(material => {
+                      const quantity = selectedMaterials[material.id] || 0
+                      
+                      return (
+                        <Card
+                          key={material.id}
+                          className="p-4 border-primary bg-primary/5 transition-all"
+                        >
+                          <div className="flex items-center gap-4">
+                            <input
+                              type="checkbox"
+                              checked={true}
+                              onChange={() => handleMaterialToggle(material.id)}
+                              className="w-4 h-4"
+                            />
                         <div className="flex-1">
                           <div className="font-medium">{material.name}</div>
                           <div className="text-sm text-muted-foreground">
@@ -380,27 +456,32 @@ export function RequestWizard({ isOpen, onClose, onSubmit }: RequestWizardProps)
                             Preço: R$ {material.unitPrice.toFixed(2)}
                           </div>
                         </div>
-                        {isSelected && (
-                          <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium">Qtd:</label>
-                            <input
-                              type="number"
-                              value={quantity}
-                              onChange={(e) => handleQuantityChange(material.id, parseInt(e.target.value) || 0)}
-                              min="0"
-                              className="w-20 px-2 py-1 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            />
-                            <span className="text-sm text-muted-foreground">{material.unit}</span>
+                            <div className="flex items-center gap-2">
+                              <label className="text-sm font-medium">Qtd:</label>
+                              <input
+                                type="number"
+                                value={quantity}
+                                onChange={(e) => handleQuantityChange(material.id, parseInt(e.target.value) || 0)}
+                                min="0"
+                                className="w-20 px-2 py-1 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+                              />
+                              <span className="text-sm text-muted-foreground">{material.unit}</span>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    </Card>
-                  )
-                })}
-              </div>
-              {activeMaterials.length > 0 && (
-                <div className="text-sm text-muted-foreground">
-                  {activeMaterials.length} material(is) selecionado(s)
+                        </Card>
+                      )
+                    })}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {activeMaterials.length} material(is) selecionado(s)
+                  </div>
+                </>
+              ) : (
+                <div className="p-8 text-center border border-dashed border-border rounded-lg">
+                  <Package className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">
+                    Nenhum material selecionado ainda. Clique no botão acima para começar.
+                  </p>
                 </div>
               )}
             </div>
@@ -418,35 +499,59 @@ export function RequestWizard({ isOpen, onClose, onSubmit }: RequestWizardProps)
                   className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
               </div>
-              <p className="text-sm text-muted-foreground">
-                Selecione uma ou mais instituições que receberão esta requisição.
-              </p>
-              <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                {institutions.map(institution => (
-                  <Card
-                    key={institution.id}
-                    className={`p-4 cursor-pointer transition-all ${
-                      selectedInstitutions.includes(institution.id)
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:border-primary/50'
-                    }`}
-                    onClick={() => handleInstitutionToggle(institution.id)}
-                  >
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedInstitutions.includes(institution.id)}
-                        onChange={() => handleInstitutionToggle(institution.id)}
-                        className="w-4 h-4"
-                      />
-                      <div>
-                        <div className="font-medium">{institution.name}</div>
-                        <div className="text-sm text-muted-foreground">{institution.city}</div>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {selectedInstitutions.length > 0 
+                    ? 'Instituições selecionadas. Você pode editar a seleção.'
+                    : 'Clique no botão abaixo para selecionar as instituições que receberão esta requisição.'}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsInstitutionSelectorOpen(true)}
+                  className="flex items-center gap-2"
+                >
+                  <School className="h-4 w-4" />
+                  {selectedInstitutions.length > 0 ? 'Editar Seleção' : 'Selecionar Instituições'}
+                </Button>
               </div>
+              {selectedInstitutions.length > 0 ? (
+                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                  {selectedInstitutions.map(id => {
+                    const institution = institutions.find(i => i.id === id)
+                    if (!institution) return null
+                    
+                    return (
+                      <Card
+                        key={institution.id}
+                        className="p-4 border-primary bg-primary/5 transition-all"
+                      >
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={true}
+                            onChange={() => handleInstitutionToggle(institution.id)}
+                            className="w-4 h-4"
+                          />
+                          <div>
+                            <div className="font-medium">{institution.name}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {institution.city}{institution.state ? `, ${institution.state}` : ''}
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="p-8 text-center border border-dashed border-border rounded-lg">
+                  <School className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">
+                    Nenhuma instituição selecionada ainda. Clique no botão acima para começar.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -478,15 +583,19 @@ export function RequestWizard({ isOpen, onClose, onSubmit }: RequestWizardProps)
                 <div>
                   <h3 className="font-semibold mb-2">Materiais Selecionados:</h3>
                   <div className="space-y-2">
-                    {activeMaterials.map(material => (
-                      <div key={material.id} className="flex justify-between text-sm p-2 bg-muted/30 rounded">
-                        <span>{material.name}</span>
-                        <span>
-                          {selectedMaterials[material.id]} {material.unit} × R$ {material.unitPrice.toFixed(2)} = 
-                          R$ {(selectedMaterials[material.id] * material.unitPrice).toFixed(2)}
-                        </span>
-                      </div>
-                    ))}
+                    {activeMaterials.map(material => {
+                      const quantity = selectedMaterials[material.id]
+                      const unitPrice = getMaterialAveragePrice(material.id)
+                      return (
+                        <div key={material.id} className="flex justify-between text-sm p-2 bg-muted/30 rounded">
+                          <span>{material.name}</span>
+                          <span>
+                            {quantity} {material.unit} × R$ {unitPrice.toFixed(2)} = 
+                            R$ {(quantity * unitPrice).toFixed(2)}
+                          </span>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
 
@@ -508,17 +617,21 @@ export function RequestWizard({ isOpen, onClose, onSubmit }: RequestWizardProps)
                   <div className="flex justify-between items-center">
                     <span className="font-semibold">Total por Requisição:</span>
                     <span className="font-bold text-lg">
-                      R$ {activeMaterials.reduce((acc, m) => 
-                        acc + (selectedMaterials[m.id] * m.unitPrice), 0
-                      ).toFixed(2)}
+                      R$ {activeMaterials.reduce((acc, m) => {
+                        const quantity = selectedMaterials[m.id]
+                        const unitPrice = getMaterialAveragePrice(m.id)
+                        return acc + (quantity * unitPrice)
+                      }, 0).toFixed(2)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center mt-2">
                     <span className="font-semibold">Total Geral ({selectedInstitutions.length} requisições):</span>
                     <span className="font-bold text-lg">
-                      R$ {(activeMaterials.reduce((acc, m) => 
-                        acc + (selectedMaterials[m.id] * m.unitPrice), 0
-                      ) * selectedInstitutions.length).toFixed(2)}
+                      R$ {(activeMaterials.reduce((acc, m) => {
+                        const quantity = selectedMaterials[m.id]
+                        const unitPrice = getMaterialAveragePrice(m.id)
+                        return acc + (quantity * unitPrice)
+                      }, 0) * selectedInstitutions.length).toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -552,6 +665,22 @@ export function RequestWizard({ isOpen, onClose, onSubmit }: RequestWizardProps)
           </div>
         </DialogFooter>
       </DialogContent>
+
+      <MaterialQuantitySelector
+        isOpen={isMaterialSelectorOpen}
+        onClose={() => setIsMaterialSelectorOpen(false)}
+        onConfirm={handleMaterialSelectorConfirm}
+        availableMaterials={availableMaterials}
+        initialSelections={selectedMaterials}
+      />
+
+      <InstitutionMultiSelector
+        isOpen={isInstitutionSelectorOpen}
+        onClose={() => setIsInstitutionSelectorOpen(false)}
+        onConfirm={handleInstitutionSelectorConfirm}
+        availableInstitutions={institutions}
+        initialSelections={selectedInstitutions}
+      />
     </Dialog>
   )
 }

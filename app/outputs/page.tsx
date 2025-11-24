@@ -1,9 +1,11 @@
 'use client'
 
-import { useState } from 'react'
-import { useData } from '@/lib/data-context'
+import { useState, useMemo } from 'react'
+import { Output } from '@/lib/data-context'
+import { useOutputs, Output as OutputType } from '@/hooks/use-outputs'
+import { useMaterials } from '@/hooks/use-materials'
+import { useInstitutions } from '@/hooks/use-institutions'
 import { AuthLayout } from '@/components/auth-layout'
-import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
 import { OutputTable } from '@/components/outputs/output-table'
 import { OutputForm } from '@/components/outputs/output-form'
@@ -11,12 +13,84 @@ import { useToast } from '@/hooks/use-toast'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 
+// Função para converter Output do Supabase para o formato esperado pelos componentes
+function convertOutput(output: OutputType): Output {
+  // Garantir que output_date está no formato YYYY-MM-DD sem conversão de timezone
+  let outputDate: string
+  
+  if (output.output_date instanceof Date) {
+    const year = output.output_date.getFullYear()
+    const month = String(output.output_date.getMonth() + 1).padStart(2, '0')
+    const day = String(output.output_date.getDate()).padStart(2, '0')
+    outputDate = `${year}-${month}-${day}`
+  } else if (typeof output.output_date === 'string') {
+    outputDate = output.output_date.includes('T') 
+      ? output.output_date.split('T')[0] 
+      : output.output_date
+  } else {
+    const today = new Date()
+    const year = today.getFullYear()
+    const month = String(today.getMonth() + 1).padStart(2, '0')
+    const day = String(today.getDate()).padStart(2, '0')
+    outputDate = `${year}-${month}-${day}`
+  }
+
+  return {
+    id: output.id,
+    materialId: output.material_id,
+    materialName: output.material_name,
+    quantity: output.quantity,
+    unit: output.unit,
+    institutionId: output.institution_id,
+    institutionName: output.institution_name,
+    reason: output.reason,
+    responsible: output.responsible,
+    outputDate: outputDate,
+    createdAt: output.created_at,
+  }
+}
+
 export default function OutputsPage() {
-  const { outputs, addOutput, updateOutput, deleteOutput, deleteAllOutputs, materials, institutions, updateMaterial } = useData()
+  const { outputs: supabaseOutputs, addOutput, updateOutput, deleteOutput, isLoading } = useOutputs()
+  const { materials: supabaseMaterials } = useMaterials()
+  const { institutions: supabaseInstitutions } = useInstitutions()
   const { toast } = useToast()
   const confirmDialog = useConfirmDialog()
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingOutput, setEditingOutput] = useState<string | null>(null)
+
+  // Converter saídas do Supabase para o formato esperado
+  const outputs = useMemo(() => {
+    return supabaseOutputs.map(convertOutput)
+  }, [supabaseOutputs])
+
+  // Converter materiais e instituições para o formato esperado
+  const materials = useMemo(() => {
+    return supabaseMaterials.map(m => ({
+      id: m.id,
+      name: m.name,
+      category: m.category,
+      unit: m.unit,
+      quantity: m.quantity,
+      minQuantity: m.min_quantity,
+      unitPrice: m.unit_price,
+      lastUpdate: m.last_update,
+    }))
+  }, [supabaseMaterials])
+
+  const institutions = useMemo(() => {
+    return supabaseInstitutions.map(i => ({
+      id: i.id,
+      name: i.name,
+      cnpj: i.cnpj,
+      city: i.city,
+      state: i.state,
+      principalName: i.principal_name,
+      phone: i.phone,
+      email: i.email,
+      createdAt: i.created_at,
+    }))
+  }, [supabaseInstitutions])
 
   const handleAddNew = () => {
     setEditingOutput(null)
@@ -28,11 +102,10 @@ export default function OutputsPage() {
     setIsFormOpen(true)
   }
 
-  const handleSubmit = (data: {
+  const handleSubmit = async (data: {
     materialId: string
     quantity: number
     institutionId?: string
-    reason: string
     responsible: string
     outputDate: string
   }) => {
@@ -46,10 +119,11 @@ export default function OutputsPage() {
       return
     }
 
+    // Verificar estoque disponível
     if (data.quantity > material.quantity) {
       toast({
         title: 'Estoque insuficiente',
-        description: `Estoque disponível: ${material.quantity} ${material.unit}. Quantidade solicitada: ${data.quantity} ${material.unit}.`,
+        description: `Estoque disponível: ${material.quantity} ${material.unit.charAt(0).toUpperCase() + material.unit.slice(1)}. Quantidade solicitada: ${data.quantity} ${material.unit.charAt(0).toUpperCase() + material.unit.slice(1)}.`,
         variant: 'destructive',
       })
       return
@@ -59,69 +133,30 @@ export default function OutputsPage() {
       ? institutions.find(i => i.id === data.institutionId)
       : null
 
-    if (editingOutput) {
-      // Editar saída existente
-      const existingOutput = outputs.find(o => o.id === editingOutput)
-      if (existingOutput) {
-        // Ajustar estoque: restaurar quantidade antiga e subtrair nova
-        const oldMaterial = materials.find(m => m.id === existingOutput.materialId)
-        if (oldMaterial) {
-          // Restaurar estoque do material antigo
-          const restoredQuantity = oldMaterial.quantity + existingOutput.quantity
-          // Se mudou de material, atualizar ambos
-          if (existingOutput.materialId !== data.materialId) {
-            // Restaurar material antigo
-            updateMaterial(existingOutput.materialId, { quantity: restoredQuantity })
-            // Subtrair do novo material
-            const newQuantity = Math.max(0, material.quantity - data.quantity)
-            updateMaterial(data.materialId, { quantity: newQuantity })
-          } else {
-            // Mesmo material, ajustar diferença
-            const difference = existingOutput.quantity - data.quantity
-            const newQuantity = Math.max(0, material.quantity + difference)
-            updateMaterial(data.materialId, { quantity: newQuantity })
-          }
-        }
-
-        updateOutput(editingOutput, {
-          materialId: data.materialId,
-          materialName: material.name,
-          quantity: data.quantity,
-          unit: material.unit,
-          institutionId: data.institutionId,
-          institutionName: institution?.name,
-          reason: data.reason,
-          responsible: data.responsible,
-          outputDate: data.outputDate,
-        })
-
-        toast({
-          title: 'Saída atualizada',
-          description: 'A saída de material foi atualizada com sucesso.',
-        })
-      }
-    } else {
-      // Nova saída
-      addOutput({
-        materialId: data.materialId,
-        materialName: material.name,
+    try {
+      // Converter para o formato do Supabase
+      const supabaseData = {
+        material_id: data.materialId,
+        material_name: material.name,
         quantity: data.quantity,
         unit: material.unit,
-        institutionId: data.institutionId,
-        institutionName: institution?.name,
-        reason: data.reason,
+        institution_id: data.institutionId || undefined,
+        institution_name: institution?.name || undefined,
+        reason: '',
         responsible: data.responsible,
-        outputDate: data.outputDate,
-      })
+        output_date: data.outputDate,
+      }
 
-      toast({
-        title: 'Saída registrada',
-        description: 'A saída de material foi registrada com sucesso.',
-      })
+      if (editingOutput) {
+        await updateOutput(editingOutput, supabaseData)
+      } else {
+        await addOutput(supabaseData)
+      }
+      setIsFormOpen(false)
+      setEditingOutput(null)
+    } catch (error) {
+      // Erro já foi tratado no hook
     }
-
-    setIsFormOpen(false)
-    setEditingOutput(null)
   }
 
   const handleCancel = () => {
@@ -140,73 +175,37 @@ export default function OutputsPage() {
     })
 
     if (confirmed) {
-      deleteOutput(id)
-      toast({
-        title: 'Saída excluída',
-        description: 'A saída foi excluída e o estoque foi restaurado.',
-        variant: 'destructive',
-      })
-    }
-  }
-
-  const handleDeleteAll = async () => {
-    if (outputs.length === 0) {
-      toast({
-        title: 'Nenhuma saída',
-        description: 'Não há saídas para excluir.',
-      })
-      return
-    }
-
-    const confirmed = await confirmDialog.confirm({
-      title: 'Excluir Todas as Saídas',
-      description: `Tem certeza que deseja excluir todas as ${outputs.length} saída(s)? O estoque de todos os materiais será restaurado. Esta ação não pode ser desfeita.`,
-      confirmText: 'Excluir Todas',
-      cancelText: 'Cancelar',
-      variant: 'destructive',
-    })
-
-    if (confirmed) {
-      const count = outputs.length
-      deleteAllOutputs()
-      toast({
-        title: 'Todas as saídas excluídas',
-        description: `${count} saída(s) excluída(s) e estoque restaurado.`,
-        variant: 'destructive',
-      })
+      try {
+        await deleteOutput(id)
+      } catch (error) {
+        // Erro já foi tratado no hook
+      }
     }
   }
 
   return (
     <AuthLayout>
       <div className="p-6 lg:p-8">
-        <PageHeader
-          title="Saídas de Materiais"
-          description="Registre saídas individuais de materiais do estoque"
-          action={
-            <div className="flex gap-2">
-              <Button 
-                onClick={handleDeleteAll} 
-                variant="destructive"
-                className="font-medium"
-              >
-                Excluir Todas (Dev)
-              </Button>
-              <Button 
-                onClick={handleAddNew} 
-                className="bg-primary hover:bg-primary/90 font-medium"
-              >
-                Nova Saída
-              </Button>
-            </div>
-          }
-        />
+        <div className="flex gap-2 mb-6 justify-end">
+          <Button 
+            onClick={handleAddNew} 
+            className="bg-primary hover:bg-primary/90 font-medium"
+          >
+            Nova Saída
+          </Button>
+        </div>
 
-        <OutputTable
-          outputs={outputs}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-        />
+        {isLoading ? (
+          <div className="flex items-center justify-center h-64">
+            <p className="text-muted-foreground">Carregando saídas...</p>
+          </div>
+        ) : (
+          <OutputTable
+            outputs={outputs}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+          />
+        )}
       </div>
 
       <OutputForm

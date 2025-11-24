@@ -82,24 +82,12 @@ export function exportSuppliersToPDF(suppliers: Supplier[]) {
 }
 
 export function exportInstitutionsToExcel(institutions: Institution[]) {
-  const getTypeLabel = (type: string) => {
-    const types: Record<string, string> = {
-      school: 'Escola',
-      center: 'Centro Educacional',
-      other: 'Outro'
-    }
-    return types[type] || type
-  }
-
   const data = institutions.map(institution => ({
     'Nome': institution.name,
-    'CNPJ': maskCNPJ(institution.cnpj),
     'Telefone': institution.phone ? maskPhone(institution.phone) : '-',
-    'Email': institution.email || '-',
-    'Endereço': institution.address || '-',
     'Cidade': institution.city,
-    'Diretor': institution.principalName,
-    'Tipo': getTypeLabel(institution.type),
+    'Estado': institution.state || '-',
+    'Responsável': institution.principalName,
     'Status': institution.status === 'active' ? 'Ativo' : 'Inativo',
     'Data de Cadastro': new Date(institution.createdAt).toLocaleDateString('pt-BR')
   }))
@@ -111,13 +99,10 @@ export function exportInstitutionsToExcel(institutions: Institution[]) {
   // Ajustar largura das colunas
   const colWidths = [
     { wch: 35 }, // Nome
-    { wch: 18 }, // CNPJ
     { wch: 15 }, // Telefone
-    { wch: 25 }, // Email
-    { wch: 30 }, // Endereço
     { wch: 20 }, // Cidade
-    { wch: 20 }, // Diretor
-    { wch: 18 }, // Tipo
+    { wch: 8 },  // Estado
+    { wch: 20 }, // Responsável
     { wch: 10 }, // Status
     { wch: 15 }  // Data
   ]
@@ -127,15 +112,6 @@ export function exportInstitutionsToExcel(institutions: Institution[]) {
 }
 
 export function exportInstitutionsToPDF(institutions: Institution[]) {
-  const getTypeLabel = (type: string) => {
-    const types: Record<string, string> = {
-      school: 'Escola',
-      center: 'Centro Educacional',
-      other: 'Outro'
-    }
-    return types[type] || type
-  }
-
   const doc = new jsPDF('landscape', 'mm', 'a4')
   
   // Título
@@ -149,16 +125,15 @@ export function exportInstitutionsToPDF(institutions: Institution[]) {
   // Tabela
   const tableData = institutions.map(institution => [
     institution.name,
-    maskCNPJ(institution.cnpj),
     institution.phone ? maskPhone(institution.phone) : '-',
     institution.city,
+    institution.state || '-',
     institution.principalName,
-    getTypeLabel(institution.type),
     institution.status === 'active' ? 'Ativo' : 'Inativo'
   ])
 
   autoTable(doc, {
-    head: [['Nome', 'CNPJ', 'Telefone', 'Cidade', 'Diretor', 'Tipo', 'Status']],
+    head: [['Nome', 'Telefone', 'Cidade', 'Estado', 'Responsável', 'Status']],
     body: tableData,
     startY: 28,
     styles: { fontSize: 8 },
@@ -366,5 +341,300 @@ export async function generateRequestReceipt(request: Request, institutionName: 
   )
   
   doc.save(`canhoto_${request.requestNumber}_${new Date().toISOString().split('T')[0]}.pdf`)
+}
+
+// Funções de exportação para páginas de despesas
+
+interface ExpenseData {
+  [key: string]: {
+    [month: number]: number
+  }
+}
+
+const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+
+const formatCurrency = (value: number) => {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
+}
+
+export function exportExpensesBySuppliersToExcel(
+  suppliers: { id: string; name: string }[],
+  expensesBySupplier: ExpenseData
+) {
+  const data = suppliers.map(supplier => {
+    const row: Record<string, string> = {
+      'Fornecedor': supplier.name,
+    }
+    
+    months.forEach((month, index) => {
+      const value = expensesBySupplier[supplier.id]?.[index] || 0
+      row[month] = formatCurrency(value)
+    })
+    
+    const total = Object.values(expensesBySupplier[supplier.id] || {}).reduce((sum, val) => sum + val, 0)
+    row['Total'] = formatCurrency(total)
+    
+    return row
+  })
+
+  const worksheet = XLSX.utils.json_to_sheet(data)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Despesas por Fornecedor')
+
+  // Ajustar largura das colunas
+  const colWidths = [
+    { wch: 30 }, // Fornecedor
+    ...months.map(() => ({ wch: 12 })), // Meses
+    { wch: 15 }  // Total
+  ]
+  worksheet['!cols'] = colWidths
+
+  XLSX.writeFile(workbook, `despesas_fornecedores_${new Date().toISOString().split('T')[0]}.xlsx`)
+}
+
+export function exportExpensesBySuppliersToPDF(
+  suppliers: { id: string; name: string }[],
+  expensesBySupplier: ExpenseData
+) {
+  const doc = new jsPDF('landscape', 'mm', 'a4')
+  
+  // Título
+  doc.setFontSize(18)
+  doc.text('Despesas por Fornecedor - CEDIME', 14, 15)
+  
+  // Data de geração
+  doc.setFontSize(10)
+  doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`, 14, 22)
+  
+  // Tabela
+  const tableData = suppliers.map(supplier => {
+    const row = [supplier.name]
+    
+    months.forEach((month, index) => {
+      const value = expensesBySupplier[supplier.id]?.[index] || 0
+      row.push(formatCurrency(value))
+    })
+    
+    const total = Object.values(expensesBySupplier[supplier.id] || {}).reduce((sum, val) => sum + val, 0)
+    row.push(formatCurrency(total))
+    
+    return row
+  })
+
+  const headers = ['Fornecedor', ...months, 'Total']
+
+  autoTable(doc, {
+    head: [headers],
+    body: tableData,
+    startY: 28,
+    styles: { fontSize: 7 },
+    headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [249, 250, 251] },
+    margin: { top: 28, left: 14, right: 14 }
+  })
+
+  // Rodapé
+  const pageCount = doc.getNumberOfPages()
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i)
+    doc.setFontSize(8)
+    doc.text(
+      `Página ${i} de ${pageCount}`,
+      doc.internal.pageSize.getWidth() / 2,
+      doc.internal.pageSize.getHeight() - 10,
+      { align: 'center' }
+    )
+  }
+
+  doc.save(`despesas_fornecedores_${new Date().toISOString().split('T')[0]}.pdf`)
+}
+
+export function exportExpensesByInstitutionsToExcel(
+  institutions: { id: string; name: string }[],
+  expensesByInstitution: ExpenseData
+) {
+  const data = institutions.map(institution => {
+    const row: Record<string, string> = {
+      'Instituição': institution.name,
+    }
+    
+    months.forEach((month, index) => {
+      const value = expensesByInstitution[institution.id]?.[index] || 0
+      row[month] = formatCurrency(value)
+    })
+    
+    const total = Object.values(expensesByInstitution[institution.id] || {}).reduce((sum, val) => sum + val, 0)
+    row['Total'] = formatCurrency(total)
+    
+    return row
+  })
+
+  const worksheet = XLSX.utils.json_to_sheet(data)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Despesas por Instituição')
+
+  // Ajustar largura das colunas
+  const colWidths = [
+    { wch: 30 }, // Instituição
+    ...months.map(() => ({ wch: 12 })), // Meses
+    { wch: 15 }  // Total
+  ]
+  worksheet['!cols'] = colWidths
+
+  XLSX.writeFile(workbook, `despesas_instituicoes_${new Date().toISOString().split('T')[0]}.xlsx`)
+}
+
+export function exportExpensesByInstitutionsToPDF(
+  institutions: { id: string; name: string }[],
+  expensesByInstitution: ExpenseData
+) {
+  const doc = new jsPDF('landscape', 'mm', 'a4')
+  
+  // Título
+  doc.setFontSize(18)
+  doc.text('Despesas por Instituição - CEDIME', 14, 15)
+  
+  // Data de geração
+  doc.setFontSize(10)
+  doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`, 14, 22)
+  
+  // Tabela
+  const tableData = institutions.map(institution => {
+    const row = [institution.name]
+    
+    months.forEach((month, index) => {
+      const value = expensesByInstitution[institution.id]?.[index] || 0
+      row.push(formatCurrency(value))
+    })
+    
+    const total = Object.values(expensesByInstitution[institution.id] || {}).reduce((sum, val) => sum + val, 0)
+    row.push(formatCurrency(total))
+    
+    return row
+  })
+
+  const headers = ['Instituição', ...months, 'Total']
+
+  autoTable(doc, {
+    head: [headers],
+    body: tableData,
+    startY: 28,
+    styles: { fontSize: 7 },
+    headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [249, 250, 251] },
+    margin: { top: 28, left: 14, right: 14 }
+  })
+
+  // Rodapé
+  const pageCount = doc.getNumberOfPages()
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i)
+    doc.setFontSize(8)
+    doc.text(
+      `Página ${i} de ${pageCount}`,
+      doc.internal.pageSize.getWidth() / 2,
+      doc.internal.pageSize.getHeight() - 10,
+      { align: 'center' }
+    )
+  }
+
+  doc.save(`despesas_instituicoes_${new Date().toISOString().split('T')[0]}.pdf`)
+}
+
+export function exportExpensesByProductsToExcel(
+  materials: { id: string; name: string }[],
+  expensesByMaterial: ExpenseData
+) {
+  const data = materials.map(material => {
+    const row: Record<string, string> = {
+      'Produto': material.name,
+    }
+    
+    months.forEach((month, index) => {
+      const value = expensesByMaterial[material.id]?.[index] || 0
+      row[month] = formatCurrency(value)
+    })
+    
+    const total = Object.values(expensesByMaterial[material.id] || {}).reduce((sum, val) => sum + val, 0)
+    row['Total'] = formatCurrency(total)
+    
+    return row
+  })
+
+  const worksheet = XLSX.utils.json_to_sheet(data)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Despesas por Produto')
+
+  // Ajustar largura das colunas
+  const colWidths = [
+    { wch: 30 }, // Produto
+    ...months.map(() => ({ wch: 12 })), // Meses
+    { wch: 15 }  // Total
+  ]
+  worksheet['!cols'] = colWidths
+
+  XLSX.writeFile(workbook, `despesas_produtos_${new Date().toISOString().split('T')[0]}.xlsx`)
+}
+
+export function exportExpensesByProductsToPDF(
+  materials: { id: string; name: string }[],
+  expensesByMaterial: ExpenseData
+) {
+  const doc = new jsPDF('landscape', 'mm', 'a4')
+  
+  // Título
+  doc.setFontSize(18)
+  doc.text('Despesas por Produto - CEDIME', 14, 15)
+  
+  // Data de geração
+  doc.setFontSize(10)
+  doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`, 14, 22)
+  
+  // Tabela
+  const tableData = materials.map(material => {
+    const row = [material.name]
+    
+    months.forEach((month, index) => {
+      const value = expensesByMaterial[material.id]?.[index] || 0
+      row.push(formatCurrency(value))
+    })
+    
+    const total = Object.values(expensesByMaterial[material.id] || {}).reduce((sum, val) => sum + val, 0)
+    row.push(formatCurrency(total))
+    
+    return row
+  })
+
+  const headers = ['Produto', ...months, 'Total']
+
+  autoTable(doc, {
+    head: [headers],
+    body: tableData,
+    startY: 28,
+    styles: { fontSize: 7 },
+    headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [249, 250, 251] },
+    margin: { top: 28, left: 14, right: 14 }
+  })
+
+  // Rodapé
+  const pageCount = doc.getNumberOfPages()
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i)
+    doc.setFontSize(8)
+    doc.text(
+      `Página ${i} de ${pageCount}`,
+      doc.internal.pageSize.getWidth() / 2,
+      doc.internal.pageSize.getHeight() - 10,
+      { align: 'center' }
+    )
+  }
+
+  doc.save(`despesas_produtos_${new Date().toISOString().split('T')[0]}.pdf`)
 }
 

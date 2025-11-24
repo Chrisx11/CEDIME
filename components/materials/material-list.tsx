@@ -1,8 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import { Material } from '@/lib/data-context'
-import { useData } from '@/lib/data-context'
 import { Button } from '@/components/ui/button'
 import {
   Table,
@@ -13,7 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Card } from '@/components/ui/card'
-import { Edit, Trash2, MoreVertical, Search } from 'lucide-react'
+import { Edit, Trash2, MoreVertical } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,10 +24,10 @@ interface MaterialListProps {
   materials: Material[]
   onEdit: (material: Material) => void
   onDelete: (id: string) => void
+  searchQuery: string
 }
 
-export function MaterialList({ materials, onEdit, onDelete }: MaterialListProps) {
-  const [searchQuery, setSearchQuery] = useState('')
+export function MaterialList({ materials, onEdit, onDelete, searchQuery }: MaterialListProps) {
 
   const getCategoryLabel = (category: string) => {
     // Retorna o próprio nome da categoria (todas são customizadas)
@@ -62,23 +61,6 @@ export function MaterialList({ materials, onEdit, onDelete }: MaterialListProps)
 
   return (
     <div className="space-y-4">
-      {/* Barra de Pesquisa */}
-      <div className="relative w-full">
-        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-          <Search className="h-4 w-4 text-muted-foreground" />
-        </div>
-        <input
-          type="text"
-          placeholder="Pesquisar por nome, categoria ou unidade..."
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value)
-          }}
-          className="w-full pl-10 pr-4 py-2 border border-input rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
-          autoComplete="off"
-        />
-      </div>
-
       {/* Tabela */}
       <Card>
         <div className="overflow-x-auto">
@@ -89,7 +71,8 @@ export function MaterialList({ materials, onEdit, onDelete }: MaterialListProps)
                 <TableHead>Categoria</TableHead>
                 <TableHead>Estoque</TableHead>
                 <TableHead>Mínimo</TableHead>
-                <TableHead>Valor Unit.</TableHead>
+                <TableHead>Unidade</TableHead>
+                <TableHead>Valor Médio</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -97,22 +80,28 @@ export function MaterialList({ materials, onEdit, onDelete }: MaterialListProps)
             <TableBody>
               {filteredMaterials.length === 0 && searchQuery.trim() !== '' ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     Nenhum material encontrado com o termo "{searchQuery}"
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredMaterials.map(material => {
-                  const isLow = material.quantity <= material.minQuantity
+                  // Usar os dados diretamente do material (já vêm do Supabase atualizados)
+                  const stock = material.quantity
+                  const averagePrice = material.unitPrice
+                  const isLow = stock <= material.minQuantity
                   return (
                     <TableRow key={material.id}>
                       <TableCell className="font-medium">
                         {material.name}
                       </TableCell>
                       <TableCell>{getCategoryLabel(material.category)}</TableCell>
-                      <TableCell>{material.quantity} {material.unit}</TableCell>
-                      <TableCell>{material.minQuantity} {material.unit}</TableCell>
-                      <TableCell>R$ {material.unitPrice.toFixed(2)}</TableCell>
+                      <TableCell>{stock}</TableCell>
+                      <TableCell>{material.minQuantity}</TableCell>
+                      <TableCell>
+                        {material.unit.charAt(0).toUpperCase() + material.unit.slice(1)}
+                      </TableCell>
+                      <TableCell>R$ {averagePrice.toFixed(2)}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 text-xs rounded-full ${
                           isLow

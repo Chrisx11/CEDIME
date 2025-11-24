@@ -6,7 +6,8 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // Máscara para CNPJ: XX.XXX.XXX/0001-XX
-export function maskCNPJ(value: string): string {
+export function maskCNPJ(value: string | undefined | null): string {
+  if (!value) return ''
   const numbers = value.replace(/\D/g, '')
   
   if (numbers.length <= 2) {
@@ -23,7 +24,8 @@ export function maskCNPJ(value: string): string {
 }
 
 // Máscara para telefone: (XX) XXXX-XXXX ou (XX) XXXXX-XXXX
-export function maskPhone(value: string): string {
+export function maskPhone(value: string | undefined | null): string {
+  if (!value) return ''
   const numbers = value.replace(/\D/g, '')
   
   if (numbers.length === 0) {
@@ -41,10 +43,12 @@ export function maskPhone(value: string): string {
 }
 
 // Remove máscaras para salvar apenas números
-export function unmaskCNPJ(value: string): string {
+export function unmaskCNPJ(value: string | undefined | null): string {
+  if (!value) return ''
   return value.replace(/\D/g, '')
 }
 
-export function unmaskPhone(value: string): string {
+export function unmaskPhone(value: string | undefined | null): string {
+  if (!value) return ''
   return value.replace(/\D/g, '')
 }

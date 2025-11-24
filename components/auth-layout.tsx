@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/auth-context'
 import { useRouter, usePathname } from 'next/navigation'
 import { useEffect, ReactNode } from 'react'
 import { Sidebar } from './sidebar'
+import { TopBar } from './topbar'
 import Image from 'next/image'
 
 export function AuthLayout({ children }: { children: ReactNode }) {
@@ -35,9 +36,25 @@ export function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-screen bg-background">
       <Sidebar />
-      <main className="flex-1 overflow-auto transition-all duration-300">
-        {children}
-      </main>
+      <div className="flex-1 flex flex-col overflow-hidden transition-all duration-300">
+        <TopBar />
+        <main className="flex-1 overflow-auto">
+          <div className="w-full bg-background/80 backdrop-blur-sm supports-[backdrop-filter]:bg-background/60 px-6 py-3">
+            <div className="flex justify-end">
+              <Image
+                src="/Inserir um título (800 x 400 px).png"
+                alt="CEDIME - Centro de Distribuição de Material Escolar"
+                width={300}
+                height={150}
+                className="h-auto max-w-[300px] object-contain drop-shadow-sm"
+                priority
+                unoptimized
+              />
+            </div>
+          </div>
+          {children}
+        </main>
+      </div>
     </div>
   )
 }

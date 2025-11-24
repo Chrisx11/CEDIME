@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { Material } from '@/lib/data-context'
-import { useData } from '@/lib/data-context'
+import { useCategories } from '@/hooks/use-categories'
+import { useUnits } from '@/hooks/use-units'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -11,8 +12,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { Package, Plus } from 'lucide-react'
-import { useToast } from '@/hooks/use-toast'
+import { Package } from 'lucide-react'
 
 interface MaterialFormProps {
   material?: Material
@@ -22,59 +22,34 @@ interface MaterialFormProps {
 }
 
 export function MaterialForm({ material, isOpen, onSubmit, onCancel }: MaterialFormProps) {
-  const { customCategories, addCustomCategory } = useData()
-  const { toast } = useToast()
-  const [showCategoryDialog, setShowCategoryDialog] = useState(false)
-  const [newCategoryName, setNewCategoryName] = useState('')
-  
+  const { categories } = useCategories()
+  const { units } = useUnits()
   const [formData, setFormData] = useState({
     name: material?.name || '',
     category: material?.category || '',
-    unit: material?.unit || 'unidade',
+    unit: material?.unit || '',
     quantity: material?.quantity || 0,
     minQuantity: material?.minQuantity || 0,
     unitPrice: material?.unitPrice || 0
   })
 
-  // Categorias padrão removidas - apenas categorias customizadas serão exibidas
-  const standardCategories: Array<{ value: string; label: string }> = []
-
-  const handleAddCategory = () => {
-    const trimmed = newCategoryName.trim()
-    if (!trimmed) {
-      toast({
-        title: 'Nome inválido',
-        description: 'Por favor, informe um nome para a categoria.',
-        variant: 'destructive',
-      })
-      return
-    }
-    
-    if (customCategories.includes(trimmed)) {
-      toast({
-        title: 'Categoria já existe',
-        description: 'Esta categoria customizada já foi cadastrada.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    addCustomCategory(trimmed)
-    setFormData(prev => ({ ...prev, category: trimmed }))
-    setNewCategoryName('')
-    setShowCategoryDialog(false)
-    toast({
-      title: 'Categoria cadastrada',
-      description: `A categoria "${trimmed}" foi cadastrada com sucesso.`,
-    })
-  }
-
   useEffect(() => {
     if (isOpen && material) {
+      // Encontrar a unidade correspondente (case-insensitive)
+      let matchedUnit = material.unit || ''
+      if (material.unit && units.length > 0) {
+        const foundUnit = units.find(
+          u => u.name.toLowerCase() === material.unit?.toLowerCase()
+        )
+        if (foundUnit) {
+          matchedUnit = foundUnit.name
+        }
+      }
+      
       setFormData({
         name: material.name,
         category: material.category,
-        unit: material.unit,
+        unit: matchedUnit,
         quantity: material.quantity,
         minQuantity: material.minQuantity,
         unitPrice: material.unitPrice
@@ -83,18 +58,29 @@ export function MaterialForm({ material, isOpen, onSubmit, onCancel }: MaterialF
       setFormData({
         name: '',
         category: '',
-        unit: 'unidade',
+        unit: '',
         quantity: 0,
         minQuantity: 0,
         unitPrice: 0
       })
     }
-    // Fechar diálogo de categoria quando o formulário principal for fechado
-    if (!isOpen) {
-      setShowCategoryDialog(false)
-      setNewCategoryName('')
-    }
   }, [isOpen, material])
+  
+  // Efeito separado para atualizar a unidade quando units for carregado
+  useEffect(() => {
+    if (isOpen && material && material.unit && units.length > 0) {
+      const foundUnit = units.find(
+        u => u.name.toLowerCase() === material.unit?.toLowerCase()
+      )
+      if (foundUnit && formData.unit !== foundUnit.name) {
+        setFormData(prev => ({
+          ...prev,
+          unit: foundUnit.name
+        }))
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, material?.id, material?.unit, units.length])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -139,32 +125,20 @@ export function MaterialForm({ material, isOpen, onSubmit, onCancel }: MaterialF
 
           <div className="space-y-2">
             <label className="text-sm font-medium">Categoria</label>
-            <div className="flex gap-2">
-              <select
-                name="category"
-                value={formData.category}
-                onChange={handleChange}
-                className="flex-1 px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                required
-              >
-                <option value="">Selecionar categoria</option>
-                {standardCategories.map(cat => (
-                  <option key={cat.value} value={cat.value}>{cat.label}</option>
-                ))}
-                {customCategories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowCategoryDialog(true)}
-                className="px-4"
-                title="Registrar nova categoria"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
+            <select
+              name="category"
+              value={formData.category}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              required
+            >
+              <option value="">Selecionar categoria</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.name}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-2">
@@ -174,27 +148,15 @@ export function MaterialForm({ material, isOpen, onSubmit, onCancel }: MaterialF
               value={formData.unit}
               onChange={handleChange}
               className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-            >
-              <option value="unidade">Unidade</option>
-              <option value="caixa">Caixa</option>
-              <option value="resma">Resma</option>
-              <option value="metro">Metro</option>
-              <option value="quilograma">Quilograma</option>
-              <option value="litro">Litro</option>
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Quantidade em Estoque</label>
-            <input
-              type="number"
-              name="quantity"
-              value={formData.quantity}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              min="0"
               required
-            />
+            >
+              <option value="">Selecionar unidade</option>
+              {units.map((unit) => (
+                <option key={unit.id} value={unit.name}>
+                  {unit.name.charAt(0).toUpperCase() + unit.name.slice(1)}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-2">
@@ -206,20 +168,6 @@ export function MaterialForm({ material, isOpen, onSubmit, onCancel }: MaterialF
               onChange={handleChange}
               className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               min="0"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Preço Unitário (R$)</label>
-            <input
-              type="number"
-              name="unitPrice"
-              value={formData.unitPrice}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              min="0"
-              step="0.01"
-              required
             />
           </div>
         </div>
@@ -234,45 +182,6 @@ export function MaterialForm({ material, isOpen, onSubmit, onCancel }: MaterialF
           </DialogFooter>
         </form>
       </DialogContent>
-
-      {/* Dialog para cadastrar nova categoria */}
-      <Dialog open={showCategoryDialog} onOpenChange={setShowCategoryDialog}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Registrar Nova Categoria</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Nome da Categoria</label>
-              <input
-                type="text"
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    handleAddCategory()
-                  }
-                }}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                placeholder="Ex: Mobiliário, Artes, etc."
-                autoFocus
-              />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => {
-                setShowCategoryDialog(false)
-                setNewCategoryName('')
-              }}>
-                Cancelar
-              </Button>
-              <Button type="button" onClick={handleAddCategory} className="bg-primary hover:bg-primary/90">
-                Cadastrar
-              </Button>
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
     </Dialog>
   )
 }

@@ -2,6 +2,13 @@
 
 import { useState, useMemo } from 'react'
 import { Output } from '@/lib/data-context'
+import { useMaterials } from '@/hooks/use-materials'
+
+// Função para capitalizar primeira letra
+const capitalizeFirst = (str: string): string => {
+  if (!str) return str
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase()
+}
 import {
   Table,
   TableBody,
@@ -27,7 +34,22 @@ interface OutputTableProps {
 }
 
 export function OutputTable({ outputs, onEdit, onDelete }: OutputTableProps) {
+  const { materials: supabaseMaterials } = useMaterials()
   const [searchQuery, setSearchQuery] = useState('')
+  
+  // Converter materiais para o formato esperado
+  const materials = useMemo(() => {
+    return supabaseMaterials.map(m => ({
+      id: m.id,
+      name: m.name,
+      category: m.category,
+      unit: m.unit,
+      quantity: m.quantity,
+      minQuantity: m.min_quantity,
+      unitPrice: m.unit_price,
+      lastUpdate: m.last_update,
+    }))
+  }, [supabaseMaterials])
 
   const filteredOutputs = useMemo(() => {
     if (!searchQuery || searchQuery.trim() === '') {
@@ -40,7 +62,6 @@ export function OutputTable({ outputs, onEdit, onDelete }: OutputTableProps) {
       return (
         output.materialName.toLowerCase().includes(query) ||
         (output.institutionName && output.institutionName.toLowerCase().includes(query)) ||
-        output.reason.toLowerCase().includes(query) ||
         output.responsible.toLowerCase().includes(query) ||
         new Date(output.outputDate).toLocaleDateString('pt-BR').includes(query)
       )
@@ -64,7 +85,7 @@ export function OutputTable({ outputs, onEdit, onDelete }: OutputTableProps) {
         </div>
         <input
           type="text"
-          placeholder="Pesquisar por material, instituição, motivo, responsável ou data..."
+          placeholder="Pesquisar por material, instituição, responsável ou data..."
           value={searchQuery}
           onChange={(e) => {
             setSearchQuery(e.target.value)
@@ -83,8 +104,9 @@ export function OutputTable({ outputs, onEdit, onDelete }: OutputTableProps) {
                 <TableHead>Data</TableHead>
                 <TableHead>Material</TableHead>
                 <TableHead>Quantidade</TableHead>
+                <TableHead>Unidade</TableHead>
+                <TableHead>Preço Médio</TableHead>
                 <TableHead>Instituição</TableHead>
-                <TableHead>Motivo</TableHead>
                 <TableHead>Responsável</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -92,21 +114,23 @@ export function OutputTable({ outputs, onEdit, onDelete }: OutputTableProps) {
             <TableBody>
               {filteredOutputs.length === 0 && searchQuery.trim() !== '' ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     Nenhuma saída encontrada com o termo "{searchQuery}"
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredOutputs.map(output => (
-                  <TableRow key={output.id}>
-                    <TableCell>{new Date(output.outputDate).toLocaleDateString('pt-BR')}</TableCell>
-                    <TableCell className="font-medium">{output.materialName}</TableCell>
-                    <TableCell>{output.quantity} {output.unit}</TableCell>
-                    <TableCell>{output.institutionName || '-'}</TableCell>
-                    <TableCell className="max-w-xs truncate" title={output.reason}>
-                      {output.reason}
-                    </TableCell>
-                    <TableCell>{output.responsible}</TableCell>
+                filteredOutputs.map(output => {
+                  const material = materials.find(m => m.id === output.materialId)
+                  const averagePrice = material ? material.unitPrice : 0
+                  return (
+                    <TableRow key={output.id}>
+                      <TableCell>{output.outputDate.split('-').reverse().join('/')}</TableCell>
+                      <TableCell className="font-medium">{output.materialName}</TableCell>
+                      <TableCell>{output.quantity}</TableCell>
+                      <TableCell>{capitalizeFirst(output.unit)}</TableCell>
+                      <TableCell>R$ {averagePrice.toFixed(2)}</TableCell>
+                      <TableCell>{output.institutionName || '-'}</TableCell>
+                      <TableCell>{output.responsible}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end">
                         <DropdownMenu>
@@ -133,7 +157,8 @@ export function OutputTable({ outputs, onEdit, onDelete }: OutputTableProps) {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
+                  )
+                })
               )}
             </TableBody>
           </Table>

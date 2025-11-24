@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { useData, Supplier } from '@/lib/data-context'
+import { useState, useMemo } from 'react'
+import { useSuppliers, Supplier as SupplierType } from '@/hooks/use-suppliers'
+import { Supplier } from '@/lib/data-context'
 import { AuthLayout } from '@/components/auth-layout'
 import { SupplierForm } from '@/components/suppliers/supplier-form'
 import { SupplierList } from '@/components/suppliers/supplier-list'
@@ -9,22 +10,42 @@ import { Button } from '@/components/ui/button'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { useToast } from '@/hooks/use-toast'
-import { PageHeader } from '@/components/page-header'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { FileText, Download, FileSpreadsheet, File } from 'lucide-react'
+import { FileText, Download, FileSpreadsheet, File, Search, DollarSign } from 'lucide-react'
+import Link from 'next/link'
 import { exportSuppliersToExcel, exportSuppliersToPDF } from '@/lib/export-utils'
 
+// Função para converter Supplier do Supabase para o formato esperado pelos componentes
+function convertSupplier(supplier: SupplierType): Supplier {
+  return {
+    id: supplier.id,
+    name: supplier.name,
+    cnpj: supplier.cnpj,
+    phone: supplier.phone,
+    city: supplier.city,
+    state: supplier.state,
+    status: supplier.status,
+    createdAt: supplier.created_at,
+  }
+}
+
 export default function SuppliersPage() {
-  const { suppliers, addSupplier, updateSupplier, deleteSupplier } = useData()
+  const { suppliers: supabaseSuppliers, addSupplier, updateSupplier, deleteSupplier, isLoading } = useSuppliers()
   const [isFormVisible, setIsFormVisible] = useState(false)
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
   const { toast } = useToast()
   const confirmDialog = useConfirmDialog()
+
+  // Converter fornecedores do Supabase para o formato esperado
+  const suppliers = useMemo(() => {
+    return supabaseSuppliers.map(convertSupplier)
+  }, [supabaseSuppliers])
 
   const handleAddNew = () => {
     setEditingSupplier(null)
@@ -36,22 +57,18 @@ export default function SuppliersPage() {
     setIsFormVisible(true)
   }
 
-  const handleSubmit = (data: Omit<Supplier, 'id' | 'createdAt'>) => {
-    if (editingSupplier) {
-      updateSupplier(editingSupplier.id, data)
-      toast({
-        title: 'Fornecedor atualizado',
-        description: 'Os dados do fornecedor foram atualizados com sucesso.',
-      })
-    } else {
-      addSupplier(data)
-      toast({
-        title: 'Fornecedor cadastrado',
-        description: 'O fornecedor foi cadastrado com sucesso.',
-      })
+  const handleSubmit = async (data: Omit<Supplier, 'id' | 'createdAt'>) => {
+    try {
+      if (editingSupplier) {
+        await updateSupplier(editingSupplier.id, data)
+      } else {
+        await addSupplier(data)
+      }
+      setIsFormVisible(false)
+      setEditingSupplier(null)
+    } catch (error) {
+      // Erro já foi tratado no hook
     }
-    setIsFormVisible(false)
-    setEditingSupplier(null)
   }
 
   const handleCancel = () => {
@@ -70,68 +87,93 @@ export default function SuppliersPage() {
     })
 
     if (confirmed) {
-      deleteSupplier(id)
-      toast({
-        title: 'Fornecedor excluído',
-        description: 'O fornecedor foi excluído com sucesso.',
-        variant: 'destructive',
-      })
+      try {
+        await deleteSupplier(id)
+      } catch (error) {
+        // Erro já foi tratado no hook
+      }
     }
+  }
+
+  if (isLoading) {
+    return (
+      <AuthLayout>
+        <div className="p-6 lg:p-8">
+          <div className="flex items-center justify-center h-64">
+            <p className="text-muted-foreground">Carregando fornecedores...</p>
+          </div>
+        </div>
+      </AuthLayout>
+    )
   }
 
   return (
     <AuthLayout>
       <div className="p-6 lg:p-8">
-        <PageHeader
-          title="Gestão de Fornecedores"
-          description="Cadastre e gerencie os fornecedores de materiais escolares"
-          action={
-            <div className="flex gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="font-medium">
-                    <FileText className="h-4 w-4 mr-2" />
-                    Relatório
-                    <Download className="h-4 w-4 ml-2" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => {
-                      exportSuppliersToExcel(suppliers)
-                      toast({
-                        title: 'Exportação concluída',
-                        description: 'Relatório Excel gerado com sucesso.',
-                      })
-                    }}
-                  >
-                    <FileSpreadsheet className="h-4 w-4 mr-2" />
-                    Exportar para Excel
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      exportSuppliersToPDF(suppliers)
-                      toast({
-                        title: 'Exportação concluída',
-                        description: 'Relatório PDF gerado com sucesso.',
-                      })
-                    }}
-                  >
-                    <File className="h-4 w-4 mr-2" />
-                    Exportar para PDF
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <Button onClick={handleAddNew} className="bg-primary hover:bg-primary/90 font-medium">
-                Novo Fornecedor
-              </Button>
+        <div className="flex gap-2 mb-6 items-center">
+          <div className="relative flex-1">
+            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+              <Search className="h-4 w-4 text-muted-foreground" />
             </div>
-          }
-        />
+            <input
+              type="text"
+              placeholder="Pesquisar por nome, CNPJ, cidade, estado ou telefone..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-input rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+              autoComplete="off"
+            />
+          </div>
+          <Link href="/expenses-suppliers">
+            <Button variant="outline" className="font-medium">
+              <DollarSign className="h-4 w-4 mr-2" />
+              Despesas
+            </Button>
+          </Link>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="font-medium">
+                <FileText className="h-4 w-4 mr-2" />
+                Relatório
+                <Download className="h-4 w-4 ml-2" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => {
+                  exportSuppliersToExcel(suppliers)
+                  toast({
+                    title: 'Exportação concluída',
+                    description: 'Relatório Excel gerado com sucesso.',
+                  })
+                }}
+              >
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Exportar para Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  exportSuppliersToPDF(suppliers)
+                  toast({
+                    title: 'Exportação concluída',
+                    description: 'Relatório PDF gerado com sucesso.',
+                  })
+                }}
+              >
+                <File className="h-4 w-4 mr-2" />
+                Exportar para PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button onClick={handleAddNew} className="bg-primary hover:bg-primary/90 font-medium">
+            Novo Fornecedor
+          </Button>
+        </div>
         <SupplierList
           suppliers={suppliers}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          searchQuery={searchQuery}
         />
 
         <SupplierForm

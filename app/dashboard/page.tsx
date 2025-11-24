@@ -2,28 +2,20 @@
 
 import React from 'react'
 import { useData } from '@/lib/data-context'
-import { useAuth } from '@/lib/auth-context'
 import { AuthLayout } from '@/components/auth-layout'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { PageHeader } from '@/components/page-header'
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { 
   Building2, 
   School, 
   Package, 
   FileText, 
-  BarChart3,
-  AlertTriangle,
-  Plus,
-  TrendingUp,
-  DollarSign,
-  CheckCircle2
+  AlertTriangle
 } from 'lucide-react'
 
 export default function DashboardPage() {
-  const { user } = useAuth()
   const { suppliers, institutions, materials, requests, seedInitialData } = useData()
   
   // Popular dados iniciais se não houver
@@ -35,9 +27,6 @@ export default function DashboardPage() {
 
   const lowStockItems = materials.filter(m => m.quantity <= m.minQuantity)
   const pendingRequests = requests.filter(r => r.status === 'pending')
-  const deliveredRequests = requests.filter(r => r.status === 'delivered')
-  const totalStockValue = materials.reduce((acc, m) => acc + (m.quantity * m.unitPrice), 0)
-  const totalRequisitionValue = requests.reduce((acc, r) => acc + r.totalValue, 0)
 
   // Dados para gráfico de requisições por status
   const statusData = [
@@ -53,22 +42,10 @@ export default function DashboardPage() {
     value: r.totalValue
   }))
 
-  const quickActions = [
-    { label: 'Novo Fornecedor', href: '/suppliers', icon: Building2 },
-    { label: 'Nova Instituição', href: '/institutions', icon: School },
-    { label: 'Novo Material', href: '/materials', icon: Package },
-    { label: 'Nova Requisição', href: '/requests', icon: FileText },
-    { label: 'Ver Relatórios', href: '/reports', icon: BarChart3 },
-  ]
 
   return (
     <AuthLayout>
       <div className="p-6 lg:p-8">
-        <PageHeader
-          title={`Bem-vindo, ${user?.name}`}
-          description="Dashboard operacional do CEDIME"
-        />
-
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           <Card className="p-5 border border-border/50 hover:border-primary/50 transition-colors">
@@ -118,9 +95,9 @@ export default function DashboardPage() {
         </div>
 
         {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 gap-6 mb-8">
           {/* Charts */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="space-y-6">
             {/* Status Chart */}
             {statusData.length > 0 && (
               <Card className="p-5 border border-border/50">
@@ -164,108 +141,28 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Quick Actions */}
-            <Card className="p-5 border border-border/50">
-              <h3 className="font-semibold text-sm mb-4 text-foreground">Ações Rápidas</h3>
-              <div className="space-y-2">
-                {quickActions.map((action, idx) => {
-                  const Icon = action.icon
-                  return (
-                    <Link key={idx} href={action.href}>
-                      <Button 
-                        variant="outline" 
-                        className="w-full justify-start border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-colors"
-                      >
-                        <Icon className="h-4 w-4 mr-2 text-muted-foreground" />
-                        <span className="text-sm">{action.label}</span>
-                      </Button>
-                    </Link>
-                  )
-                })}
-              </div>
-            </Card>
-
-            {/* Key Metrics */}
-            <Card className="p-5 border border-border/50">
-              <h3 className="font-semibold text-sm mb-4 text-foreground">Métricas Principais</h3>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Valor Total Estoque</span>
-                  </div>
-                  <span className="font-semibold text-base text-foreground">R$ {totalStockValue.toFixed(2)}</span>
-                </div>
-                <div className="border-t border-border/50" />
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Valor em Requisições</span>
-                  </div>
-                  <span className="font-semibold text-base text-foreground">R$ {totalRequisitionValue.toFixed(2)}</span>
-                </div>
-                <div className="border-t border-border/50" />
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Taxa Entrega</span>
-                  </div>
-                  <span className="font-semibold text-base text-foreground">
-                    {requests.length === 0 ? '0%' : Math.round((deliveredRequests.length / requests.length) * 100) + '%'}
-                  </span>
-                </div>
-              </div>
-            </Card>
-          </div>
         </div>
 
         {/* Alerts */}
-        {(lowStockItems.length > 0 || pendingRequests.length > 0) && (
-          <div className="space-y-4">
-            {lowStockItems.length > 0 && (
-              <Card className="p-5 border-destructive/20 bg-destructive/5">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
-                    <div>
-                      <h4 className="font-semibold text-sm mb-1.5 text-foreground">Alerta de Estoque Baixo</h4>
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        {lowStockItems.length} item(ns) com estoque abaixo do mínimo. Considere fazer novos pedidos.
-                      </p>
-                    </div>
-                  </div>
-                  <Link href="/materials">
-                    <Button variant="outline" size="sm" className="border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground">
-                      Ver Detalhes
-                    </Button>
-                  </Link>
+        {pendingRequests.length > 0 && (
+          <Card className="p-5 border-yellow-500/20 bg-yellow-500/5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <FileText className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h4 className="font-semibold text-sm mb-1.5 text-foreground">Requisições Pendentes</h4>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {pendingRequests.length} requisição(ões) aguardando aprovação. Revise e processe conforme necessário.
+                  </p>
                 </div>
-              </Card>
-            )}
-
-            {pendingRequests.length > 0 && (
-              <Card className="p-5 border-yellow-500/20 bg-yellow-500/5">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3">
-                    <FileText className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <h4 className="font-semibold text-sm mb-1.5 text-foreground">Requisições Pendentes</h4>
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        {pendingRequests.length} requisição(ões) aguardando aprovação. Revise e processe conforme necessário.
-                      </p>
-                    </div>
-                  </div>
-                  <Link href="/requests">
-                    <Button variant="outline" size="sm" className="border-yellow-500/30 text-yellow-600 hover:bg-yellow-500 hover:text-yellow-50">
-                      Ver Requisições
-                    </Button>
-                  </Link>
-                </div>
-              </Card>
-            )}
-          </div>
+              </div>
+              <Link href="/requests">
+                <Button variant="outline" size="sm" className="border-yellow-500/30 text-yellow-600 hover:bg-yellow-500 hover:text-yellow-50">
+                  Ver Requisições
+                </Button>
+              </Link>
+            </div>
+          </Card>
         )}
       </div>
     </AuthLayout>

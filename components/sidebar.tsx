@@ -3,8 +3,6 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useAuth } from '@/lib/auth-context'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { 
   LayoutDashboard, 
@@ -12,16 +10,17 @@ import {
   School, 
   Package, 
   FileText, 
-  BarChart3,
-  LogOut,
   ChevronLeft,
   ChevronRight,
-  ArrowRightCircle
+  ArrowRightCircle,
+  ArrowDownCircle,
+  Truck,
+  DollarSign,
+  TrendingDown
 } from 'lucide-react'
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { logout } = useAuth()
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   // Carregar estado do localStorage
@@ -44,44 +43,45 @@ export function Sidebar() {
     { href: '/suppliers', label: 'Fornecedores', icon: Building2 },
     { href: '/institutions', label: 'Instituições', icon: School },
     { href: '/materials', label: 'Materiais', icon: Package },
-    { href: '/requests', label: 'Requisições', icon: FileText },
+    { href: '/entries', label: 'Entradas', icon: ArrowDownCircle },
     { href: '/outputs', label: 'Saídas', icon: ArrowRightCircle },
-    { href: '/reports', label: 'Relatórios', icon: BarChart3 },
+    { href: '/requests', label: 'Requisições', icon: FileText },
+    { href: '/deliveries', label: 'Entregas', icon: Truck },
+    { href: '/expenses-suppliers', label: 'Despesas Fornecedor', icon: DollarSign },
+    { href: '/expenses-institutions', label: 'Despesas Instituições', icon: TrendingDown },
+    { href: '/expenses-products', label: 'Despesas Produtos', icon: DollarSign },
   ]
 
   return (
     <aside className={cn(
-      'bg-sidebar border-r border-sidebar-border flex flex-col h-screen transition-all duration-300 relative',
+      'bg-sidebar border-r border-sidebar-border flex flex-col h-screen transition-all duration-300 relative overflow-x-visible z-40',
       isCollapsed ? 'w-16' : 'w-64'
     )}>
       {/* Botão de recolher/expandir */}
       <button
         onClick={toggleCollapse}
-        className="absolute -right-3 top-6 z-10 h-6 w-6 rounded-full border-2 border-sidebar-border bg-sidebar shadow-sm flex items-center justify-center hover:bg-sidebar-accent transition-colors"
+        className="absolute top-1/2 -translate-y-1/2 -right-3 z-[9999] h-6 w-6 rounded-full border-2 border-sidebar-primary bg-sidebar-primary shadow-lg flex items-center justify-center hover:opacity-90 transition-opacity"
+        style={{ zIndex: 9999 }}
         aria-label={isCollapsed ? 'Expandir menu' : 'Recolher menu'}
       >
         {isCollapsed ? (
-          <ChevronRight className="h-3 w-3 text-sidebar-foreground" />
+          <ChevronRight className="h-3 w-3 text-sidebar-primary-foreground" />
         ) : (
-          <ChevronLeft className="h-3 w-3 text-sidebar-foreground" />
+          <ChevronLeft className="h-3 w-3 text-sidebar-primary-foreground" />
         )}
       </button>
-
       <div className={cn(
-        'border-b border-sidebar-border transition-all duration-300',
-        isCollapsed ? 'p-4' : 'p-6'
+        'border-b border-sidebar-border transition-all duration-300 relative flex items-center justify-center',
+        isCollapsed ? 'px-4 py-6' : 'px-6 py-6'
       )}>
         {!isCollapsed ? (
-          <>
-            <h1 className="text-xl font-semibold tracking-tight text-sidebar-primary">CEDIME</h1>
-            <p className="text-xs text-sidebar-foreground/60 mt-0.5 font-medium">Centro de Distribuição</p>
-          </>
+          <h1 className="text-xl font-semibold tracking-tight text-sidebar-primary text-center">CEDIME</h1>
         ) : (
           <h1 className="text-xl font-semibold tracking-tight text-sidebar-primary text-center">C</h1>
         )}
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-4 px-3">
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden py-4 px-3">
         {menuItems.map((item) => {
           const Icon = item.icon
           const isActive = pathname === item.href
@@ -112,24 +112,6 @@ export function Sidebar() {
           )
         })}
       </nav>
-
-      <div className={cn(
-        'border-t border-sidebar-border transition-all duration-300',
-        isCollapsed ? 'p-2' : 'p-4'
-      )}>
-        <Button
-          onClick={logout}
-          variant="outline"
-          className={cn(
-            'border-destructive/20 text-destructive hover:bg-destructive hover:text-destructive-foreground',
-            isCollapsed ? 'w-full p-0 h-10' : 'w-full'
-          )}
-          title={isCollapsed ? 'Sair' : undefined}
-        >
-          <LogOut className={cn('h-4 w-4', !isCollapsed && 'mr-2')} />
-          {!isCollapsed && 'Sair'}
-        </Button>
-      </div>
     </aside>
   )
 }

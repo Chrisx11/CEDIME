@@ -22,8 +22,19 @@ export default function LoginPage() {
     try {
       await login(email, password)
       router.push('/dashboard')
+      router.refresh()
     } catch (err) {
-      setError((err as Error).message)
+      const errorMessage = (err as Error).message
+      // Traduzir mensagens de erro comuns do Supabase
+      if (errorMessage.includes('Invalid login credentials') || errorMessage.includes('invalid_credentials')) {
+        setError('Email ou senha incorretos')
+      } else if (errorMessage.includes('Email not confirmed')) {
+        setError('Por favor, confirme seu email antes de fazer login')
+      } else if (errorMessage.includes('Too many requests')) {
+        setError('Muitas tentativas. Por favor, aguarde um momento')
+      } else {
+        setError(errorMessage || 'Erro ao fazer login. Tente novamente')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -78,13 +89,6 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-6 p-4 rounded-md bg-muted/50 border border-border/50">
-            <p className="text-xs font-medium text-muted-foreground mb-2">Credenciais de Demonstração:</p>
-            <div className="space-y-1 text-xs text-muted-foreground">
-              <p><span className="font-medium">Email:</span> demo@cedime.com</p>
-              <p><span className="font-medium">Senha:</span> senha123</p>
-            </div>
-          </div>
         </div>
       </Card>
     </div>

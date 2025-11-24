@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import { Supplier } from '@/lib/data-context'
 import { Button } from '@/components/ui/button'
 import {
@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Search, Edit, Trash2, MoreVertical } from 'lucide-react'
+import { Edit, Trash2, MoreVertical } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { maskCNPJ, maskPhone } from '@/lib/utils'
 import {
@@ -25,10 +25,10 @@ interface SupplierListProps {
   suppliers: Supplier[]
   onEdit: (supplier: Supplier) => void
   onDelete: (id: string) => void
+  searchQuery: string
 }
 
-export function SupplierList({ suppliers, onEdit, onDelete }: SupplierListProps) {
-  const [searchQuery, setSearchQuery] = useState('')
+export function SupplierList({ suppliers, onEdit, onDelete, searchQuery }: SupplierListProps) {
 
   // Usar useMemo para garantir que o filtro seja recalculado
   const filteredSuppliers = useMemo(() => {
@@ -84,23 +84,6 @@ export function SupplierList({ suppliers, onEdit, onDelete }: SupplierListProps)
 
   return (
     <div className="space-y-4">
-      {/* Barra de Pesquisa */}
-      <div className="relative w-full">
-        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-          <Search className="h-4 w-4 text-muted-foreground" />
-        </div>
-        <input
-          type="text"
-          placeholder="Pesquisar por nome, CNPJ, cidade, estado ou telefone..."
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value)
-          }}
-          className="w-full pl-10 pr-4 py-2 border border-input rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
-          autoComplete="off"
-        />
-      </div>
-
       {/* Tabela */}
       <Card>
         <div className="overflow-x-auto">

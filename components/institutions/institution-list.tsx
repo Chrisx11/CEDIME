@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import { Institution } from '@/lib/data-context'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,8 +12,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Card } from '@/components/ui/card'
-import { maskCNPJ, maskPhone } from '@/lib/utils'
-import { Edit, Trash2, MoreVertical, Search } from 'lucide-react'
+import { maskPhone } from '@/lib/utils'
+import { Edit, Trash2, MoreVertical } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,19 +25,10 @@ interface InstitutionListProps {
   institutions: Institution[]
   onEdit: (institution: Institution) => void
   onDelete: (id: string) => void
+  searchQuery: string
 }
 
-export function InstitutionList({ institutions, onEdit, onDelete }: InstitutionListProps) {
-  const [searchQuery, setSearchQuery] = useState('')
-
-  const getTypeLabel = (type: string) => {
-    const types: Record<string, string> = {
-      school: 'Escola',
-      center: 'Centro Educacional',
-      other: 'Outro'
-    }
-    return types[type] || type
-  }
+export function InstitutionList({ institutions, onEdit, onDelete, searchQuery }: InstitutionListProps) {
 
   const filteredInstitutions = useMemo(() => {
     if (!searchQuery || searchQuery.trim() === '') {
@@ -50,20 +41,8 @@ export function InstitutionList({ institutions, onEdit, onDelete }: InstitutionL
     return institutions.filter(institution => {
       const nameMatch = institution.name.toLowerCase().includes(query)
       const cityMatch = institution.city.toLowerCase().includes(query)
+      const stateMatch = institution.state?.toLowerCase().includes(query) || false
       const principalMatch = institution.principalName.toLowerCase().includes(query)
-      const typeLabel = getTypeLabel(institution.type).toLowerCase()
-      const typeMatch = typeLabel.includes(query)
-      
-      // Buscar por CNPJ (com ou sem máscara) - só se houver números na busca
-      let cnpjMatch = false
-      if (queryNumbers.length > 0 && institution.cnpj) {
-        const cnpjUnmasked = institution.cnpj.replace(/\D/g, '')
-        cnpjMatch = cnpjUnmasked.includes(queryNumbers)
-      }
-      if (!cnpjMatch && institution.cnpj) {
-        const cnpjFormatted = maskCNPJ(institution.cnpj)
-        cnpjMatch = cnpjFormatted.toLowerCase().includes(query)
-      }
       
       // Buscar por telefone (com ou sem máscara) - só se houver números na busca
       let phoneMatch = false
@@ -77,7 +56,7 @@ export function InstitutionList({ institutions, onEdit, onDelete }: InstitutionL
         }
       }
       
-      return nameMatch || cityMatch || principalMatch || typeMatch || cnpjMatch || phoneMatch
+      return nameMatch || cityMatch || stateMatch || principalMatch || phoneMatch
     })
   }, [institutions, searchQuery])
 
@@ -91,23 +70,6 @@ export function InstitutionList({ institutions, onEdit, onDelete }: InstitutionL
 
   return (
     <div className="space-y-4">
-      {/* Barra de Pesquisa */}
-      <div className="relative w-full">
-        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-          <Search className="h-4 w-4 text-muted-foreground" />
-        </div>
-        <input
-          type="text"
-          placeholder="Pesquisar por nome, CNPJ, cidade, diretor, tipo ou telefone..."
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value)
-          }}
-          className="w-full pl-10 pr-4 py-2 border border-input rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
-          autoComplete="off"
-        />
-      </div>
-
       {/* Tabela */}
       <Card>
         <div className="overflow-x-auto">
@@ -115,11 +77,10 @@ export function InstitutionList({ institutions, onEdit, onDelete }: InstitutionL
             <TableHeader>
               <TableRow>
                 <TableHead>Nome</TableHead>
-                <TableHead>CNPJ</TableHead>
                 <TableHead>Telefone</TableHead>
                 <TableHead>Cidade</TableHead>
-                <TableHead>Diretor</TableHead>
-                <TableHead>Tipo</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead>Responsável</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -127,7 +88,7 @@ export function InstitutionList({ institutions, onEdit, onDelete }: InstitutionL
             <TableBody>
               {filteredInstitutions.length === 0 && searchQuery.trim() !== '' ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     Nenhuma instituição encontrada com o termo "{searchQuery}"
                   </TableCell>
                 </TableRow>
@@ -135,11 +96,10 @@ export function InstitutionList({ institutions, onEdit, onDelete }: InstitutionL
                 filteredInstitutions.map(institution => (
                   <TableRow key={institution.id}>
                     <TableCell className="font-medium">{institution.name}</TableCell>
-                    <TableCell>{maskCNPJ(institution.cnpj)}</TableCell>
                     <TableCell>{institution.phone ? maskPhone(institution.phone) : '-'}</TableCell>
                     <TableCell>{institution.city}</TableCell>
+                    <TableCell>{institution.state || '-'}</TableCell>
                     <TableCell>{institution.principalName}</TableCell>
-                    <TableCell>{getTypeLabel(institution.type)}</TableCell>
                     <TableCell>
                       <span className={`px-2 py-1 text-xs rounded-full ${
                         institution.status === 'active'

@@ -11,7 +11,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { School } from 'lucide-react'
-import { maskCNPJ, maskPhone, unmaskCNPJ, unmaskPhone } from '@/lib/utils'
+import { maskPhone, unmaskPhone } from '@/lib/utils'
 
 interface InstitutionFormProps {
   institution?: Institution
@@ -23,12 +23,9 @@ interface InstitutionFormProps {
 export function InstitutionForm({ institution, isOpen, onSubmit, onCancel }: InstitutionFormProps) {
   const [formData, setFormData] = useState({
     name: institution?.name || '',
-    type: (institution?.type || 'school') as 'school' | 'center' | 'other',
-    cnpj: institution?.cnpj || '',
-    email: institution?.email || '',
     phone: institution?.phone || '',
-    address: institution?.address || '',
     city: institution?.city || '',
+    state: institution?.state || '',
     principalName: institution?.principalName || '',
     status: (institution?.status || 'active') as 'active' | 'inactive'
   })
@@ -37,24 +34,18 @@ export function InstitutionForm({ institution, isOpen, onSubmit, onCancel }: Ins
     if (isOpen && institution) {
       setFormData({
         name: institution.name,
-        type: institution.type,
-        cnpj: maskCNPJ(institution.cnpj),
-        email: institution.email,
         phone: institution.phone ? maskPhone(institution.phone) : '',
-        address: institution.address,
         city: institution.city,
+        state: institution.state || '',
         principalName: institution.principalName,
         status: institution.status
       })
     } else if (isOpen && !institution) {
       setFormData({
         name: '',
-        type: 'school',
-        cnpj: '',
-        email: '',
         phone: '',
-        address: '',
         city: '',
+        state: '',
         principalName: '',
         status: 'active'
       })
@@ -64,10 +55,7 @@ export function InstitutionForm({ institution, isOpen, onSubmit, onCancel }: Ins
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
     
-    if (name === 'cnpj') {
-      const masked = maskCNPJ(value)
-      setFormData(prev => ({ ...prev, [name]: masked }))
-    } else if (name === 'phone') {
+    if (name === 'phone') {
       const masked = maskPhone(value)
       setFormData(prev => ({ ...prev, [name]: masked }))
     } else {
@@ -79,9 +67,16 @@ export function InstitutionForm({ institution, isOpen, onSubmit, onCancel }: Ins
     e.preventDefault()
     // Remover máscaras antes de enviar
     const dataToSubmit = {
-      ...formData,
-      cnpj: unmaskCNPJ(formData.cnpj),
-      phone: unmaskPhone(formData.phone)
+      name: formData.name,
+      phone: unmaskPhone(formData.phone),
+      city: formData.city,
+      state: formData.state,
+      principalName: formData.principalName,
+      status: formData.status,
+      type: 'school' as const,
+      cnpj: '',
+      email: '',
+      address: '',
     }
     onSubmit(dataToSubmit)
   }
@@ -115,46 +110,6 @@ export function InstitutionForm({ institution, isOpen, onSubmit, onCancel }: Ins
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Tipo</label>
-              <select
-                name="type"
-                value={formData.type}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              >
-                <option value="school">Escola</option>
-                <option value="center">Centro Educacional</option>
-                <option value="other">Outro</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">CNPJ</label>
-              <input
-                type="text"
-                name="cnpj"
-                value={formData.cnpj}
-                onChange={handleChange}
-                maxLength={18}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                placeholder="00.000.000/0000-00"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Email</label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
               <label className="text-sm font-medium">Telefone</label>
               <input
                 type="tel"
@@ -168,23 +123,11 @@ export function InstitutionForm({ institution, isOpen, onSubmit, onCancel }: Ins
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Diretor/Responsável</label>
+              <label className="text-sm font-medium">Responsável</label>
               <input
                 type="text"
                 name="principalName"
                 value={formData.principalName}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                required
-              />
-            </div>
-
-            <div className="md:col-span-2 space-y-2">
-              <label className="text-sm font-medium">Endereço</label>
-              <input
-                type="text"
-                name="address"
-                value={formData.address}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 required
@@ -197,6 +140,18 @@ export function InstitutionForm({ institution, isOpen, onSubmit, onCancel }: Ins
                 type="text"
                 name="city"
                 value={formData.city}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Estado</label>
+              <input
+                type="text"
+                name="state"
+                value={formData.state}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 required

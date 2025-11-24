@@ -22,6 +22,7 @@ export interface Institution {
   phone: string
   address: string
   city: string
+  state: string
   principalName: string
   status: 'active' | 'inactive'
   createdAt: string
@@ -57,6 +58,40 @@ export interface RequestItem {
   total: number
 }
 
+export interface Delivery {
+  id: string
+  deliveryNumber: string
+  supplier: string
+  deliveryDate: string
+  status: 'pending' | 'received' | 'cancelled'
+  items: DeliveryItem[]
+  totalValue: number
+  createdAt: string
+}
+
+export interface DeliveryItem {
+  materialId: string
+  materialName: string
+  quantity: number
+  unitPrice: number
+  total: number
+}
+
+export interface Entry {
+  id: string
+  materialId: string
+  materialName: string
+  quantity: number
+  unit: string
+  unitPrice: number
+  supplierId?: string
+  supplierName?: string
+  reason: string
+  responsible: string
+  entryDate: string
+  createdAt: string
+}
+
 export interface Output {
   id: string
   materialId: string
@@ -76,6 +111,8 @@ interface DataContextType {
   institutions: Institution[]
   materials: Material[]
   requests: Request[]
+  deliveries: Delivery[]
+  entries: Entry[]
   outputs: Output[]
   customCategories: string[]
   addSupplier: (supplier: Omit<Supplier, 'id' | 'createdAt'>) => void
@@ -91,10 +128,20 @@ interface DataContextType {
   addRequests: (requests: Array<Omit<Request, 'id' | 'requestNumber' | 'createdAt'>>) => void
   updateRequest: (id: string, request: Partial<Request>) => void
   deleteRequest: (id: string) => void
+  addDelivery: (delivery: Omit<Delivery, 'id' | 'deliveryNumber' | 'createdAt'>) => void
+  addDeliveries: (deliveries: Array<Omit<Delivery, 'id' | 'deliveryNumber' | 'createdAt'>>) => void
+  updateDelivery: (id: string, delivery: Partial<Delivery>) => void
+  deleteDelivery: (id: string) => void
+  addEntry: (entry: Omit<Entry, 'id' | 'createdAt'>) => void
+  updateEntry: (id: string, entry: Partial<Entry>) => void
+  deleteEntry: (id: string) => void
+  deleteAllEntries: () => void
   addOutput: (output: Omit<Output, 'id' | 'createdAt'>) => void
   updateOutput: (id: string, output: Partial<Output>) => void
   deleteOutput: (id: string) => void
   deleteAllOutputs: () => void
+  getMaterialStock: (materialId: string) => number
+  getMaterialAveragePrice: (materialId: string) => number
   addCustomCategory: (category: string) => void
   seedInitialData: () => void
 }
@@ -106,6 +153,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [institutions, setInstitutions] = useState<Institution[]>([])
   const [materials, setMaterials] = useState<Material[]>([])
   const [requests, setRequests] = useState<Request[]>([])
+  const [deliveries, setDeliveries] = useState<Delivery[]>([])
+  const [entries, setEntries] = useState<Entry[]>([])
   const [outputs, setOutputs] = useState<Output[]>([])
   const [customCategories, setCustomCategories] = useState<string[]>([])
   const [isInitialized, setIsInitialized] = useState(false)
@@ -149,16 +198,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     // Instituições
     const initialInstitutions: Institution[] = [
-      { id: 'institution-1', name: 'GLYCERIO SALLES', type: 'school', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', principalName: '', status: 'active', createdAt: new Date().toISOString() },
-      { id: 'institution-2', name: 'SÃO PEDRO', type: 'school', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', principalName: '', status: 'active', createdAt: new Date().toISOString() },
-      { id: 'institution-3', name: 'SECRETARIA DE EDUCAÇÃO', type: 'other', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', principalName: '', status: 'active', createdAt: new Date().toISOString() },
-      { id: 'institution-4', name: 'SEVERINO', type: 'school', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', principalName: '', status: 'active', createdAt: new Date().toISOString() },
-      { id: 'institution-5', name: 'TRANSPORTE ESCOLAR', type: 'other', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', principalName: '', status: 'active', createdAt: new Date().toISOString() },
-      { id: 'institution-6', name: 'VOVÓ CELITA', type: 'school', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', principalName: '', status: 'active', createdAt: new Date().toISOString() },
-      { id: 'institution-7', name: 'CRECHE', type: 'center', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', principalName: '', status: 'active', createdAt: new Date().toISOString() },
-      { id: 'institution-8', name: 'DR MATTOS', type: 'school', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', principalName: '', status: 'active', createdAt: new Date().toISOString() },
-      { id: 'institution-9', name: 'JOÃO BARCELOS', type: 'school', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', principalName: '', status: 'active', createdAt: new Date().toISOString() },
-      { id: 'institution-10', name: 'ANTÔNIO FERREIRA', type: 'school', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', principalName: '', status: 'active', createdAt: new Date().toISOString() },
+      { id: 'institution-1', name: 'GLYCERIO SALLES', type: 'school', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', state: 'RJ', principalName: '', status: 'active', createdAt: new Date().toISOString() },
+      { id: 'institution-2', name: 'SÃO PEDRO', type: 'school', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', state: 'RJ', principalName: '', status: 'active', createdAt: new Date().toISOString() },
+      { id: 'institution-3', name: 'SECRETARIA DE EDUCAÇÃO', type: 'other', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', state: 'RJ', principalName: '', status: 'active', createdAt: new Date().toISOString() },
+      { id: 'institution-4', name: 'SEVERINO', type: 'school', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', state: 'RJ', principalName: '', status: 'active', createdAt: new Date().toISOString() },
+      { id: 'institution-5', name: 'TRANSPORTE ESCOLAR', type: 'other', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', state: 'RJ', principalName: '', status: 'active', createdAt: new Date().toISOString() },
+      { id: 'institution-6', name: 'VOVÓ CELITA', type: 'school', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', state: 'RJ', principalName: '', status: 'active', createdAt: new Date().toISOString() },
+      { id: 'institution-7', name: 'CRECHE', type: 'center', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', state: 'RJ', principalName: '', status: 'active', createdAt: new Date().toISOString() },
+      { id: 'institution-8', name: 'DR MATTOS', type: 'school', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', state: 'RJ', principalName: '', status: 'active', createdAt: new Date().toISOString() },
+      { id: 'institution-9', name: 'JOÃO BARCELOS', type: 'school', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', state: 'RJ', principalName: '', status: 'active', createdAt: new Date().toISOString() },
+      { id: 'institution-10', name: 'ANTÔNIO FERREIRA', type: 'school', cnpj: '00.000.000/0000-00', email: '', phone: '(00) 00000-0000', address: '', city: 'ITALVA', state: 'RJ', principalName: '', status: 'active', createdAt: new Date().toISOString() },
     ]
 
     // Produtos cadastrados
@@ -485,7 +534,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         }
         
         setRequests(data.requests || [])
-            setOutputs(data.outputs || [])
+        setDeliveries(data.deliveries || [])
+        setEntries(data.entries || [])
+        setOutputs(data.outputs || [])
       } catch (e) {
         console.error('Erro ao carregar dados:', e)
         // Se houver erro, usar dados iniciais
@@ -493,6 +544,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setMaterials(initialMaterials)
         setInstitutions(initialInstitutions)
         setRequests([])
+        setDeliveries([])
+        setEntries([])
       }
     } else {
       // Se não houver dados salvos, usar dados iniciais
@@ -500,6 +553,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setMaterials(initialMaterials)
       setInstitutions(initialInstitutions)
       setRequests([])
+      setEntries([])
     }
     
     setIsInitialized(true)
@@ -512,9 +566,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       institutions,
       materials,
       requests,
+      deliveries,
+      entries,
       outputs
     }))
-  }, [suppliers, institutions, materials, requests, outputs])
+  }, [suppliers, institutions, materials, requests, deliveries, entries, outputs])
 
   const addCustomCategory = (category: string) => {
     const trimmedCategory = category.trim()
@@ -668,6 +724,88 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setRequests(requests.map(r => r.id === id ? { ...r, ...updates } : r))
   }
 
+  const addDelivery = (deliveryData: Omit<Delivery, 'id' | 'deliveryNumber' | 'createdAt'>) => {
+    const random = Math.random().toString(36).substring(2, 8)
+    const deliveryNumber = `DEL-${Date.now()}-${random}`
+    const id = Math.random().toString(36).substring(7)
+    
+    setDeliveries(prev => [...prev, {
+      ...deliveryData,
+      id,
+      deliveryNumber,
+      createdAt: new Date().toISOString()
+    }])
+  }
+
+  const addDeliveries = (deliveriesData: Array<Omit<Delivery, 'id' | 'deliveryNumber' | 'createdAt'>>) => {
+    // Criar múltiplas entregas de uma vez
+    const baseTimestamp = Date.now()
+    const newDeliveries: Delivery[] = deliveriesData.map((delivery, index) => {
+      const random = Math.random().toString(36).substring(2, 8)
+      const deliveryNumber = `DEL-${baseTimestamp + index}-${random}`
+      const id = Math.random().toString(36).substring(7)
+      
+      return {
+        ...delivery,
+        id,
+        deliveryNumber,
+        createdAt: new Date().toISOString()
+      }
+    })
+    
+    setDeliveries(prev => [...prev, ...newDeliveries])
+
+    // Criar entradas individuais para cada item de cada entrega
+    const newEntries: Entry[] = []
+    
+    newDeliveries.forEach(delivery => {
+      const supplier = suppliers.find(s => s.id === delivery.supplier)
+      
+      delivery.items.forEach(item => {
+        const material = materials.find(m => m.id === item.materialId)
+        if (material) {
+          newEntries.push({
+            id: Math.random().toString(36).substring(7),
+            materialId: item.materialId,
+            materialName: item.materialName,
+            quantity: item.quantity,
+            unit: material.unit,
+            unitPrice: item.unitPrice,
+            supplierId: delivery.supplier,
+            supplierName: supplier?.name,
+            reason: `Entrega ${delivery.deliveryNumber}`,
+            responsible: supplier?.name || 'Sistema',
+            entryDate: delivery.deliveryDate,
+            createdAt: new Date().toISOString()
+          })
+        }
+      })
+    })
+
+    // Adicionar todas as entradas de uma vez
+    setEntries(prev => [...prev, ...newEntries])
+  }
+
+  const updateDelivery = (id: string, updates: Partial<Delivery>) => {
+    setDeliveries(deliveries.map(d => d.id === id ? { ...d, ...updates } : d))
+  }
+
+  const deleteDelivery = (id: string) => {
+    const delivery = deliveries.find(d => d.id === id)
+    if (!delivery) return
+
+    // Encontrar todas as entradas relacionadas a esta entrega
+    const relatedEntries = entries.filter(e => 
+      e.reason.includes(delivery.deliveryNumber)
+    )
+
+    // Excluir as entradas relacionadas
+    setEntries(prev => prev.filter(e => !relatedEntries.some(re => re.id === e.id)))
+
+    // Excluir a entrega
+    setDeliveries(prev => prev.filter(d => d.id !== id))
+  }
+
   const deleteRequest = (id: string) => {
     const request = requests.find(r => r.id === id)
     if (!request) return
@@ -704,16 +842,61 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setRequests(requests.filter(r => r.id !== id))
   }
 
-  const addOutput = (output: Omit<Output, 'id' | 'createdAt'>) => {
-    const id = Math.random().toString(36).substring(7)
+  // Função para calcular estoque: total de entradas - total de saídas
+  const getMaterialStock = (materialId: string): number => {
+    const totalEntries = entries
+      .filter(e => e.materialId === materialId)
+      .reduce((sum, e) => sum + e.quantity, 0)
     
-    // Atualizar estoque do material
-    const material = materials.find(m => m.id === output.materialId)
-    if (material) {
-      const newQuantity = Math.max(0, material.quantity - output.quantity)
-      updateMaterial(output.materialId, { quantity: newQuantity })
+    const totalOutputs = outputs
+      .filter(o => o.materialId === materialId)
+      .reduce((sum, o) => sum + o.quantity, 0)
+    
+    return Math.max(0, totalEntries - totalOutputs)
+  }
+
+  // Função para calcular valor médio ponderado baseado nas entradas
+  const getMaterialAveragePrice = (materialId: string): number => {
+    const materialEntries = entries.filter(e => e.materialId === materialId)
+    
+    if (materialEntries.length === 0) {
+      // Se não houver entradas, retorna o preço unitário do material (valor padrão)
+      const material = materials.find(m => m.id === materialId)
+      return material?.unitPrice || 0
     }
     
+    // Calcular média ponderada: soma(quantidade * preço) / soma(quantidade)
+    const totalValue = materialEntries.reduce((sum, e) => sum + (e.quantity * e.unitPrice), 0)
+    const totalQuantity = materialEntries.reduce((sum, e) => sum + e.quantity, 0)
+    
+    if (totalQuantity === 0) return 0
+    
+    return totalValue / totalQuantity
+  }
+
+  const addEntry = (entry: Omit<Entry, 'id' | 'createdAt'>) => {
+    const id = Math.random().toString(36).substring(7)
+    setEntries(prev => [...prev, {
+      ...entry,
+      id,
+      createdAt: new Date().toISOString()
+    }])
+  }
+
+  const updateEntry = (id: string, updates: Partial<Entry>) => {
+    setEntries(entries.map(e => e.id === id ? { ...e, ...updates } : e))
+  }
+
+  const deleteEntry = (id: string) => {
+    setEntries(entries.filter(e => e.id !== id))
+  }
+
+  const deleteAllEntries = () => {
+    setEntries([])
+  }
+
+  const addOutput = (output: Omit<Output, 'id' | 'createdAt'>) => {
+    const id = Math.random().toString(36).substring(7)
     setOutputs(prev => [...prev, {
       ...output,
       id,
@@ -726,14 +909,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }
 
   const deleteOutput = (id: string) => {
-    const output = outputs.find(o => o.id === id)
-    if (output) {
-      // Restaurar estoque do material
-      const material = materials.find(m => m.id === output.materialId)
-      if (material) {
-        updateMaterial(output.materialId, { quantity: material.quantity + output.quantity })
-      }
-    }
     setOutputs(outputs.filter(o => o.id !== id))
   }
 
@@ -790,6 +965,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       institutions,
       materials,
       requests,
+      deliveries,
+      entries,
+      outputs,
       customCategories,
       addSupplier,
       updateSupplier,
@@ -804,11 +982,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       addRequests,
       updateRequest,
       deleteRequest,
-      outputs,
+      addDelivery,
+      addDeliveries,
+      updateDelivery,
+      deleteDelivery,
+      addEntry,
+      updateEntry,
+      deleteEntry,
+      deleteAllEntries,
       addOutput,
       updateOutput,
       deleteOutput,
       deleteAllOutputs,
+      getMaterialStock,
+      getMaterialAveragePrice,
       addCustomCategory,
       seedInitialData
     }}>

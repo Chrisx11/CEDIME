@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { Request } from '@/lib/data-context'
-import { useData } from '@/lib/data-context'
+import { useInstitutions } from '@/hooks/use-institutions'
 import {
   Table,
   TableBody,
@@ -32,9 +32,24 @@ interface RequestTableProps {
 }
 
 export function RequestTable({ requests, onDelete, onUpdateStatus, onGenerateReceipt }: RequestTableProps) {
-  const { institutions } = useData()
+  const { institutions: supabaseInstitutions } = useInstitutions()
   const [searchQuery, setSearchQuery] = useState('')
   const confirmDialog = useConfirmDialog()
+
+  // Converter instituições para o formato esperado
+  const institutions = useMemo(() => {
+    return supabaseInstitutions.map(i => ({
+      id: i.id,
+      name: i.name,
+      cnpj: i.cnpj,
+      city: i.city,
+      state: i.state,
+      principalName: i.principal_name,
+      phone: i.phone,
+      email: i.email,
+      createdAt: i.created_at,
+    }))
+  }, [supabaseInstitutions])
 
   const getInstitutionName = (institutionId: string) => {
     return institutions.find(i => i.id === institutionId)?.name || 'Desconhecido'

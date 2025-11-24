@@ -1,6 +1,8 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 interface User {
   id: string
@@ -13,7 +15,7 @@ interface AuthContextType {
   user: User | null
   isLoading: boolean
   login: (email: string, password: string) => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -21,43 +23,77 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const supabase = createClient()
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('cedim_user')
-    if (storedUser) {
+    // Verificar sessão atual
+    const checkSession = async () => {
       try {
-        setUser(JSON.parse(storedUser))
-      } catch {
-        localStorage.removeItem('cedim_user')
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.user) {
+          setUser(mapSupabaseUserToUser(session.user))
+        }
+      } catch (error) {
+        console.error('Erro ao verificar sessão:', error)
+      } finally {
+        setIsLoading(false)
       }
     }
-    setIsLoading(false)
-  }, [])
+
+    checkSession()
+
+    // Escutar mudanças na autenticação
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session?.user) {
+          setUser(mapSupabaseUserToUser(session.user))
+        } else {
+          setUser(null)
+        }
+        setIsLoading(false)
+      }
+    )
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [supabase])
 
   const login = async (email: string, password: string) => {
     setIsLoading(true)
     try {
-      // Demo: Simulando autenticação
-      if (email && password.length >= 6) {
-        const newUser: User = {
-          id: Math.random().toString(36).substring(7),
-          name: email.split('@')[0],
-          email,
-          role: 'admin'
-        }
-        setUser(newUser)
-        localStorage.setItem('cedim_user', JSON.stringify(newUser))
-      } else {
-        throw new Error('Credenciais inválidas')
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (error) {
+        throw new Error(error.message || 'Credenciais inválidas')
       }
+
+      if (data.user) {
+        setUser(mapSupabaseUserToUser(data.user))
+      } else {
+        throw new Error('Falha ao fazer login')
+      }
+    } catch (error) {
+      throw error
     } finally {
       setIsLoading(false)
     }
   }
 
-  const logout = () => {
-    setUser(null)
-    localStorage.removeItem('cedim_user')
+  const logout = async () => {
+    setIsLoading(true)
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        console.error('Erro ao fazer logout:', error)
+      }
+      setUser(null)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -65,6 +101,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       {children}
     </AuthContext.Provider>
   )
+}
+
+// Função auxiliar para mapear usuário do Supabase para o formato User
+function mapSupabaseUserToUser(supabaseUser: SupabaseUser): User {
+  // Extrair nome do email ou usar user_metadata se disponível
+  const name = supabaseUser.user_metadata?.name || 
+               supabaseUser.user_metadata?.full_name ||
+               supabaseUser.email?.split('@')[0] || 
+               'Usuário'
+  
+  // Extrair role do user_metadata ou usar 'admin' como padrão
+  const role = (supabaseUser.user_metadata?.role as 'admin' | 'manager' | 'viewer') || 'admin'
+
+  return {
+    id: supabaseUser.id,
+    name,
+    email: supabaseUser.email || '',
+    role,
+  }
 }
 
 export function useAuth() {
