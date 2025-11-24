@@ -271,7 +271,7 @@ export async function generateRequestReceipt(request: Request, institutionName: 
   
   // Título
   doc.setFontSize(20)
-  doc.setFont(undefined, 'bold')
+  doc.setFont('helvetica', 'bold')
   doc.text('CANHOTO DE ENTREGA', 105, logoData ? 35 : 30, { align: 'center' })
   
   // Adicionar logo se disponível
@@ -285,7 +285,7 @@ export async function generateRequestReceipt(request: Request, institutionName: 
   
   // Informações da requisição
   doc.setFontSize(12)
-  doc.setFont(undefined, 'normal')
+  doc.setFont('helvetica', 'normal')
   let yPos = logoData ? 55 : 50
   
   doc.text(`Número da Requisição: ${request.requestNumber}`, 15, yPos)
@@ -324,7 +324,7 @@ export async function generateRequestReceipt(request: Request, institutionName: 
   
   // Linha de assinatura
   doc.setFontSize(10)
-  doc.setFont(undefined, 'normal')
+  doc.setFont('helvetica', 'normal')
   doc.text('_________________________________', 15, finalY + 35)
   doc.text('Assinatura do Responsável', 15, finalY + 40)
   
