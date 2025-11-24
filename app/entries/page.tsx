@@ -16,27 +16,10 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 // Função para converter Entry do Supabase para o formato esperado pelos componentes
 function convertEntry(entry: EntryType): Entry {
   // Garantir que entry_date está no formato YYYY-MM-DD sem conversão de timezone
-  let entryDate: string
-  
-  if (entry.entry_date instanceof Date) {
-    // Se for Date object, usar métodos locais para evitar conversão UTC
-    const year = entry.entry_date.getFullYear()
-    const month = String(entry.entry_date.getMonth() + 1).padStart(2, '0')
-    const day = String(entry.entry_date.getDate()).padStart(2, '0')
-    entryDate = `${year}-${month}-${day}`
-  } else if (typeof entry.entry_date === 'string') {
-    // Se for string, extrair apenas a parte da data (YYYY-MM-DD)
-    entryDate = entry.entry_date.includes('T') 
-      ? entry.entry_date.split('T')[0] 
-      : entry.entry_date
-  } else {
-    // Fallback para data atual
-    const today = new Date()
-    const year = today.getFullYear()
-    const month = String(today.getMonth() + 1).padStart(2, '0')
-    const day = String(today.getDate()).padStart(2, '0')
-    entryDate = `${year}-${month}-${day}`
-  }
+  // entry_date do Supabase sempre vem como string
+  const entryDate = typeof entry.entry_date === 'string' && entry.entry_date.includes('T')
+    ? entry.entry_date.split('T')[0]
+    : entry.entry_date || new Date().toISOString().split('T')[0]
 
   return {
     id: entry.id,
