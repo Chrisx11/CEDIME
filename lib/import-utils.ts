@@ -40,7 +40,7 @@ interface ExcelMaterialRow {
   'Última Atualização': string
 }
 
-interface ImportResult {
+export interface ImportResult {
   success: number
   errors: number
   notFound: string[]
