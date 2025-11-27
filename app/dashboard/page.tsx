@@ -1,7 +1,10 @@
 'use client'
 
 import React from 'react'
-import { useData } from '@/lib/data-context'
+import { useSuppliers } from '@/hooks/use-suppliers'
+import { useInstitutions } from '@/hooks/use-institutions'
+import { useMaterials } from '@/hooks/use-materials'
+import { useRequests } from '@/hooks/use-requests'
 import { AuthLayout } from '@/components/auth-layout'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -16,16 +19,23 @@ import {
 } from 'lucide-react'
 
 export default function DashboardPage() {
-  const { suppliers, institutions, materials, requests, seedInitialData } = useData()
-  
-  // Popular dados iniciais se não houver
-  React.useEffect(() => {
-    if (suppliers.length === 0 || materials.length === 0) {
-      seedInitialData()
-    }
-  }, [suppliers.length, materials.length, seedInitialData])
+  const { suppliers, isLoading: isLoadingSuppliers } = useSuppliers()
+  const { institutions, isLoading: isLoadingInstitutions } = useInstitutions()
+  const { materials, isLoading: isLoadingMaterials } = useMaterials()
+  const { requests, isLoading: isLoadingRequests } = useRequests()
 
-  const lowStockItems = materials.filter(m => m.quantity <= m.minQuantity)
+  const isLoading = isLoadingSuppliers || isLoadingInstitutions || isLoadingMaterials || isLoadingRequests
+
+  // Filtrar fornecedores ativos
+  const activeSuppliers = suppliers.filter(s => s.status === 'active')
+  
+  // Filtrar instituições ativas
+  const activeInstitutions = institutions.filter(i => i.status === 'active')
+
+  // Materiais com estoque baixo
+  const lowStockItems = materials.filter(m => m.quantity <= m.min_quantity)
+  
+  // Requisições pendentes
   const pendingRequests = requests.filter(r => r.status === 'pending')
 
   // Dados para gráfico de requisições por status
@@ -37,11 +47,27 @@ export default function DashboardPage() {
   ].filter(s => s.value > 0)
 
   // Dados para gráfico de requisições recentes
-  const recentRequests = requests.slice(-6).map(r => ({
-    number: r.requestNumber.substring(4),
-    value: r.totalValue
-  }))
+  const recentRequests = requests
+    .slice()
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 6)
+    .map(r => ({
+      number: r.request_number.substring(4),
+      value: r.total_value
+    }))
 
+
+  if (isLoading) {
+    return (
+      <AuthLayout>
+        <div className="p-6 lg:p-8">
+          <div className="flex items-center justify-center h-64">
+            <p className="text-muted-foreground">Carregando dados do dashboard...</p>
+          </div>
+        </div>
+      </AuthLayout>
+    )
+  }
 
   return (
     <AuthLayout>
@@ -53,8 +79,8 @@ export default function DashboardPage() {
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Fornecedores</div>
               <Building2 className="h-4 w-4 text-primary/60" />
             </div>
-            <div className="text-2xl font-semibold text-foreground">{suppliers.length}</div>
-            <div className="text-xs text-muted-foreground mt-1">cadastrados</div>
+            <div className="text-2xl font-semibold text-foreground">{activeSuppliers.length}</div>
+            <div className="text-xs text-muted-foreground mt-1">ativos</div>
           </Card>
 
           <Card className="p-5 border border-border/50 hover:border-secondary/50 transition-colors">
@@ -62,7 +88,7 @@ export default function DashboardPage() {
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Instituições</div>
               <School className="h-4 w-4 text-secondary/60" />
             </div>
-            <div className="text-2xl font-semibold text-foreground">{institutions.length}</div>
+            <div className="text-2xl font-semibold text-foreground">{activeInstitutions.length}</div>
             <div className="text-xs text-muted-foreground mt-1">ativas</div>
           </Card>
 
@@ -72,7 +98,7 @@ export default function DashboardPage() {
               <Package className="h-4 w-4 text-accent/60" />
             </div>
             <div className="text-2xl font-semibold text-foreground">{materials.length}</div>
-            <div className="text-xs text-muted-foreground mt-1">em estoque</div>
+            <div className="text-xs text-muted-foreground mt-1">cadastrados</div>
           </Card>
 
           <Card className="p-5 border border-destructive/20 bg-destructive/5 hover:border-destructive/40 transition-colors">
@@ -133,7 +159,16 @@ export default function DashboardPage() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="number" />
                     <YAxis />
-                    <Tooltip formatter={(value) => `R$ ${(value as number).toFixed(2)}`} />
+                    <Tooltip 
+                      formatter={(value) => 
+                        new Intl.NumberFormat('pt-BR', {
+                          style: 'currency',
+                          currency: 'BRL',
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        }).format(value as number)
+                      } 
+                    />
                     <Bar dataKey="value" fill="#3b82f6" radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
