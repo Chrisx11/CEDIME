@@ -17,12 +17,29 @@ import {
   FileText, 
   AlertTriangle
 } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 export default function DashboardPage() {
   const { suppliers, isLoading: isLoadingSuppliers } = useSuppliers()
   const { institutions, isLoading: isLoadingInstitutions } = useInstitutions()
   const { materials, isLoading: isLoadingMaterials } = useMaterials()
   const { requests, isLoading: isLoadingRequests } = useRequests()
+
+  const [isLowStockDialogOpen, setIsLowStockDialogOpen] = React.useState(false)
 
   const isLoading = isLoadingSuppliers || isLoadingInstitutions || isLoadingMaterials || isLoadingRequests
 
@@ -103,7 +120,10 @@ export default function DashboardPage() {
             <div className="text-xs text-muted-foreground mt-1">cadastrados</div>
           </Card>
 
-          <Card className="p-5 border border-destructive/20 bg-destructive/5 hover:border-destructive/40 transition-colors">
+          <Card 
+            className="p-5 border border-destructive/20 bg-destructive/5 hover:border-destructive/40 transition-colors cursor-pointer"
+            onClick={() => lowStockItems.length > 0 && setIsLowStockDialogOpen(true)}
+          >
             <div className="flex items-center justify-between mb-3">
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Estoque Baixo</div>
               <AlertTriangle className="h-4 w-4 text-destructive/70" />
@@ -201,6 +221,64 @@ export default function DashboardPage() {
             </div>
           </Card>
         )}
+
+        {/* Diálogo de Estoque Baixo */}
+        <Dialog open={isLowStockDialogOpen} onOpenChange={setIsLowStockDialogOpen}>
+          <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl">Itens com Estoque Baixo</DialogTitle>
+                  <DialogDescription className="mt-1">
+                    {lowStockItems.length} item(ns) com estoque abaixo ou igual ao mínimo
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+
+            {lowStockItems.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">
+                Nenhum item com estoque baixo no momento.
+              </div>
+            ) : (
+              <div className="mt-4">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>Categoria</TableHead>
+                      <TableHead>Estoque</TableHead>
+                      <TableHead>Mínimo</TableHead>
+                      <TableHead>Unidade</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {lowStockItems.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">{item.name}</TableCell>
+                        <TableCell>{item.category}</TableCell>
+                        <TableCell>{item.quantity}</TableCell>
+                        <TableCell>{item.min_quantity}</TableCell>
+                        <TableCell>
+                          {item.unit.charAt(0).toUpperCase() + item.unit.slice(1)}
+                        </TableCell>
+                        <TableCell>
+                          <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                            Estoque Baixo
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </AuthLayout>
   )
