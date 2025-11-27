@@ -7,6 +7,7 @@ import { useMaterials } from '@/hooks/use-materials'
 import { useEntries } from '@/hooks/use-entries'
 import { useInstitutions } from '@/hooks/use-institutions'
 import { useOutputs } from '@/hooks/use-outputs'
+import { useCategories } from '@/hooks/use-categories'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -54,8 +55,10 @@ export default function ExpensesProductsPage() {
   const { entries, isLoading: isLoadingEntries } = useEntries()
   const { institutions, isLoading: isLoadingInstitutions } = useInstitutions()
   const { outputs, isLoading: isLoadingOutputs } = useOutputs()
+  const { categories } = useCategories()
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedInstitutionId, setSelectedInstitutionId] = useState<string>('all')
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [viewMode, setViewMode] = useState<'values' | 'quantities' | 'complete'>('values')
   const { toast } = useToast()
 
@@ -84,6 +87,11 @@ export default function ExpensesProductsPage() {
       filtered = filtered.filter(material => materialsByInstitution.has(material.id))
     }
 
+    // Filtrar por categoria
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(material => material.category === selectedCategory)
+    }
+
     // Filtrar por busca de texto
     if (searchQuery && searchQuery.trim() !== '') {
       const query = searchQuery.trim().toLowerCase()
@@ -95,7 +103,7 @@ export default function ExpensesProductsPage() {
     }
 
     return filtered
-  }, [materials, searchQuery, selectedInstitutionId, materialsByInstitution])
+  }, [materials, searchQuery, selectedInstitutionId, selectedCategory, materialsByInstitution])
 
 
   // Calcular despesas por produto e mês
@@ -274,8 +282,8 @@ export default function ExpensesProductsPage() {
   return (
     <AuthLayout>
       <div className="p-6 lg:p-8">
-        <div className="flex gap-2 mb-6 items-center">
-          <div className="relative flex-1">
+        <div className="flex flex-wrap gap-2 mb-6 items-center">
+          <div className="relative flex-1 min-w-[200px]">
             <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
               <Search className="h-4 w-4 text-muted-foreground" />
             </div>
@@ -288,8 +296,21 @@ export default function ExpensesProductsPage() {
               autoComplete="off"
             />
           </div>
+          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Todas as categorias" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as categorias</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category.id} value={category.name}>
+                  {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={selectedInstitutionId || 'all'} onValueChange={setSelectedInstitutionId}>
-            <SelectTrigger className="w-[250px]">
+            <SelectTrigger className="w-[200px]">
               <School className="h-4 w-4 mr-2" />
               <SelectValue placeholder="Todas as instituições" />
             </SelectTrigger>
@@ -306,8 +327,8 @@ export default function ExpensesProductsPage() {
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="font-medium">
                 <Eye className="h-4 w-4 mr-2" />
-                {viewMode === 'values' && 'Mostrar Valores'}
-                {viewMode === 'quantities' && 'Mostrar Quantidade'}
+                {viewMode === 'values' && 'Valores'}
+                {viewMode === 'quantities' && 'Quantidade'}
                 {viewMode === 'complete' && 'Completo'}
               </Button>
             </DropdownMenuTrigger>

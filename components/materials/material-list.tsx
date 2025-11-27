@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Material } from '@/lib/data-context'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,7 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Card } from '@/components/ui/card'
-import { Edit, Trash2, MoreVertical } from 'lucide-react'
+import { Edit, Trash2, MoreVertical, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,31 +25,82 @@ interface MaterialListProps {
   onEdit: (material: Material) => void
   onDelete: (id: string) => void
   searchQuery: string
+  selectedCategory: string
 }
 
-export function MaterialList({ materials, onEdit, onDelete, searchQuery }: MaterialListProps) {
+export function MaterialList({ materials, onEdit, onDelete, searchQuery, selectedCategory }: MaterialListProps) {
+  const [sortColumn, setSortColumn] = useState<keyof Material | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
 
   const getCategoryLabel = (category: string) => {
     // Retorna o próprio nome da categoria (todas são customizadas)
     return category
   }
 
-  const filteredMaterials = useMemo(() => {
-    if (!searchQuery || searchQuery.trim() === '') {
-      return materials
+  const handleSort = (column: keyof Material) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  const SortIcon = ({ column }: { column: keyof Material }) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="h-4 w-4 ml-1 opacity-50" />
+    }
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="h-4 w-4 ml-1" />
+      : <ArrowDown className="h-4 w-4 ml-1" />
+  }
+
+  const filteredAndSortedMaterials = useMemo(() => {
+    let filtered = materials
+
+    // Filtro de pesquisa
+    if (searchQuery && searchQuery.trim() !== '') {
+      const query = searchQuery.trim().toLowerCase()
+      filtered = filtered.filter(material => {
+        const nameMatch = material.name.toLowerCase().includes(query)
+        const categoryLabel = getCategoryLabel(material.category).toLowerCase()
+        const categoryMatch = categoryLabel.includes(query)
+        const unitMatch = material.unit.toLowerCase().includes(query)
+        
+        return nameMatch || categoryMatch || unitMatch
+      })
     }
 
-    const query = searchQuery.trim().toLowerCase()
-    
-    return materials.filter(material => {
-      const nameMatch = material.name.toLowerCase().includes(query)
-      const categoryLabel = getCategoryLabel(material.category).toLowerCase()
-      const categoryMatch = categoryLabel.includes(query)
-      const unitMatch = material.unit.toLowerCase().includes(query)
-      
-      return nameMatch || categoryMatch || unitMatch
-    })
-  }, [materials, searchQuery])
+    // Filtro de categoria
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(material => material.category === selectedCategory)
+    }
+
+    // Ordenação
+    if (sortColumn) {
+      filtered = [...filtered].sort((a, b) => {
+        const aValue = a[sortColumn]
+        const bValue = b[sortColumn]
+        
+        if (aValue === null || aValue === undefined) return 1
+        if (bValue === null || bValue === undefined) return -1
+        
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return sortDirection === 'asc'
+            ? aValue.localeCompare(bValue)
+            : bValue.localeCompare(aValue)
+        }
+        
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return sortDirection === 'asc' ? aValue - bValue : bValue - aValue
+        }
+        
+        return 0
+      })
+    }
+
+    return filtered
+  }, [materials, searchQuery, selectedCategory, sortColumn, sortDirection])
 
   if (materials.length === 0) {
     return (
@@ -67,25 +118,75 @@ export function MaterialList({ materials, onEdit, onDelete, searchQuery }: Mater
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead>Estoque</TableHead>
-                <TableHead>Mínimo</TableHead>
-                <TableHead>Unidade</TableHead>
-                <TableHead>Valor Médio</TableHead>
+                <TableHead 
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleSort('name')}
+                >
+                  <div className="flex items-center">
+                    Nome
+                    <SortIcon column="name" />
+                  </div>
+                </TableHead>
+                <TableHead 
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleSort('category')}
+                >
+                  <div className="flex items-center">
+                    Categoria
+                    <SortIcon column="category" />
+                  </div>
+                </TableHead>
+                <TableHead 
+                  className="cursor-pointer hover:bg-muted/50 text-right"
+                  onClick={() => handleSort('quantity')}
+                >
+                  <div className="flex items-center justify-end">
+                    Estoque
+                    <SortIcon column="quantity" />
+                  </div>
+                </TableHead>
+                <TableHead 
+                  className="cursor-pointer hover:bg-muted/50 text-right"
+                  onClick={() => handleSort('minQuantity')}
+                >
+                  <div className="flex items-center justify-end">
+                    Mínimo
+                    <SortIcon column="minQuantity" />
+                  </div>
+                </TableHead>
+                <TableHead 
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleSort('unit')}
+                >
+                  <div className="flex items-center">
+                    Unidade
+                    <SortIcon column="unit" />
+                  </div>
+                </TableHead>
+                <TableHead 
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleSort('unitPrice')}
+                >
+                  <div className="flex items-center">
+                    Valor Médio
+                    <SortIcon column="unitPrice" />
+                  </div>
+                </TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredMaterials.length === 0 && searchQuery.trim() !== '' ? (
+              {filteredAndSortedMaterials.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                    Nenhum material encontrado com o termo "{searchQuery}"
+                    {searchQuery.trim() !== '' || selectedCategory !== 'all'
+                      ? 'Nenhum material encontrado com os filtros aplicados.'
+                      : 'Nenhum material cadastrado ainda'}
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredMaterials.map(material => {
+                filteredAndSortedMaterials.map(material => {
                   // Usar os dados diretamente do material (já vêm do Supabase atualizados)
                   const stock = material.quantity
                   const averagePrice = material.unitPrice
@@ -152,9 +253,9 @@ export function MaterialList({ materials, onEdit, onDelete, searchQuery }: Mater
         </div>
       </Card>
 
-      {filteredMaterials.length > 0 && (
+      {filteredAndSortedMaterials.length > 0 && (
         <div className="text-sm text-muted-foreground">
-          Mostrando {filteredMaterials.length} de {materials.length} material(is)
+          Mostrando {filteredAndSortedMaterials.length} de {materials.length} material(is)
         </div>
       )}
     </div>

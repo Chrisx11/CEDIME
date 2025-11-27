@@ -5,6 +5,8 @@ import { useSuppliers } from '@/hooks/use-suppliers'
 import { useInstitutions } from '@/hooks/use-institutions'
 import { useMaterials } from '@/hooks/use-materials'
 import { useRequests } from '@/hooks/use-requests'
+import { useEntries } from '@/hooks/use-entries'
+import { useOutputs } from '@/hooks/use-outputs'
 import { AuthLayout } from '@/components/auth-layout'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -50,6 +52,8 @@ export default function DashboardPage() {
   const { institutions, isLoading: isLoadingInstitutions } = useInstitutions()
   const { materials, isLoading: isLoadingMaterials } = useMaterials()
   const { requests, isLoading: isLoadingRequests } = useRequests()
+  const { entries = [], isLoading: isLoadingEntries } = useEntries()
+  const { outputs = [], isLoading: isLoadingOutputs } = useOutputs()
 
   const [isLowStockDialogOpen, setIsLowStockDialogOpen] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
@@ -143,6 +147,77 @@ export default function DashboardPage() {
       ? <ArrowUp className="h-4 w-4 ml-1" />
       : <ArrowDown className="h-4 w-4 ml-1" />
   }
+
+  // Calcular total de compras por fornecedor
+  const purchasesBySupplier = React.useMemo(() => {
+    if (!entries || entries.length === 0) return []
+    
+    const purchases: Record<string, { total: number; name: string }> = {}
+    
+    entries.forEach(entry => {
+      if (!entry.supplier_id || !entry.supplier_name) return
+      
+      const value = entry.quantity * entry.unit_price
+      
+      if (!purchases[entry.supplier_id]) {
+        purchases[entry.supplier_id] = {
+          total: 0,
+          name: entry.supplier_name
+        }
+      }
+      
+      purchases[entry.supplier_id].total += value
+    })
+    
+    // Converter para array e ordenar por valor
+    return Object.entries(purchases)
+      .map(([supplierId, data]) => {
+        const supplier = suppliers.find(s => s.id === supplierId)
+        return {
+          name: supplier?.name || data.name || 'Fornecedor Desconhecido',
+          value: data.total
+        }
+      })
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10) // Top 10
+  }, [entries, suppliers])
+
+  // Calcular despesas por instituição
+  const expensesByInstitution = React.useMemo(() => {
+    if (!outputs || outputs.length === 0) return []
+    
+    const expenses: Record<string, { total: number; name: string }> = {}
+    
+    outputs.forEach(output => {
+      if (!output.institution_id || !output.institution_name) return
+      
+      // Buscar preço unitário do material
+      const material = materials.find(m => m.id === output.material_id)
+      const unitPrice = material?.unit_price || 0
+      const value = output.quantity * unitPrice
+      
+      if (!expenses[output.institution_id]) {
+        expenses[output.institution_id] = {
+          total: 0,
+          name: output.institution_name
+        }
+      }
+      
+      expenses[output.institution_id].total += value
+    })
+    
+    // Converter para array e ordenar por valor
+    return Object.entries(expenses)
+      .map(([institutionId, data]) => {
+        const institution = institutions.find(i => i.id === institutionId)
+        return {
+          name: institution?.name || data.name || 'Instituição Desconhecida',
+          value: data.total
+        }
+      })
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10) // Top 10
+  }, [outputs, materials, institutions])
 
   // Dados para gráfico de requisições por status
   const statusData = [
@@ -283,6 +358,110 @@ export default function DashboardPage() {
                 </ResponsiveContainer>
               </Card>
             )}
+
+            {/* Total de Compras por Fornecedor */}
+            <Card className="p-5 border border-border/50">
+              <h3 className="font-semibold text-sm mb-5 text-foreground">Total de Compras por Fornecedor</h3>
+              {purchasesBySupplier.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart 
+                    data={purchasesBySupplier}
+                    layout="vertical"
+                    margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      type="number"
+                      tickFormatter={(value) => 
+                        new Intl.NumberFormat('pt-BR', {
+                          style: 'currency',
+                          currency: 'BRL',
+                          notation: 'compact',
+                          maximumFractionDigits: 0,
+                        }).format(value)
+                      }
+                    />
+                    <YAxis 
+                      type="category" 
+                      dataKey="name" 
+                      width={90}
+                      tick={{ fontSize: 12 }}
+                    />
+                    <Tooltip 
+                      formatter={(value) => 
+                        new Intl.NumberFormat('pt-BR', {
+                          style: 'currency',
+                          currency: 'BRL',
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        }).format(value as number)
+                      }
+                      labelStyle={{ fontWeight: 'bold' }}
+                    />
+                    <Bar dataKey="value" fill="#10b981" radius={[0, 8, 8, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                  <div className="text-center">
+                    <p className="text-sm">Nenhuma compra registrada ainda.</p>
+                    <p className="text-xs mt-1">Os dados aparecerão aqui quando houver entradas de materiais.</p>
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            {/* Despesas por Instituição */}
+            <Card className="p-5 border border-border/50">
+              <h3 className="font-semibold text-sm mb-5 text-foreground">Despesas por Instituição</h3>
+              {expensesByInstitution.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart 
+                    data={expensesByInstitution}
+                    layout="vertical"
+                    margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      type="number"
+                      tickFormatter={(value) => 
+                        new Intl.NumberFormat('pt-BR', {
+                          style: 'currency',
+                          currency: 'BRL',
+                          notation: 'compact',
+                          maximumFractionDigits: 0,
+                        }).format(value)
+                      }
+                    />
+                    <YAxis 
+                      type="category" 
+                      dataKey="name" 
+                      width={90}
+                      tick={{ fontSize: 12 }}
+                    />
+                    <Tooltip 
+                      formatter={(value) => 
+                        new Intl.NumberFormat('pt-BR', {
+                          style: 'currency',
+                          currency: 'BRL',
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        }).format(value as number)
+                      }
+                      labelStyle={{ fontWeight: 'bold' }}
+                    />
+                    <Bar dataKey="value" fill="#f59e0b" radius={[0, 8, 8, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                  <div className="text-center">
+                    <p className="text-sm">Nenhuma despesa registrada ainda.</p>
+                    <p className="text-xs mt-1">Os dados aparecerão aqui quando houver saídas de materiais para instituições.</p>
+                  </div>
+                </div>
+              )}
+            </Card>
           </div>
 
         </div>

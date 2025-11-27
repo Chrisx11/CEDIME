@@ -22,6 +22,14 @@ import { exportMaterialsToExcel, exportMaterialsToPDF } from '@/lib/export-utils
 import { CategoryDialog } from '@/components/materials/category-dialog'
 import { UnitDialog } from '@/components/materials/unit-dialog'
 import { ImportMaterialsDialog } from '@/components/materials/import-materials-dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { useCategories } from '@/hooks/use-categories'
 
 // Função para converter Material do Supabase para o formato esperado pelos componentes
 function convertMaterial(material: MaterialType): Material {
@@ -39,12 +47,14 @@ function convertMaterial(material: MaterialType): Material {
 
 export default function MaterialsPage() {
   const { materials: supabaseMaterials, addMaterial, updateMaterial, deleteMaterial, isLoading, refreshMaterials } = useMaterials()
+  const { categories } = useCategories()
   const [isFormVisible, setIsFormVisible] = useState(false)
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false)
   const [isUnitDialogOpen, setIsUnitDialogOpen] = useState(false)
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const { toast } = useToast()
   const confirmDialog = useConfirmDialog()
 
@@ -126,8 +136,8 @@ export default function MaterialsPage() {
   return (
     <AuthLayout>
       <div className="p-6 lg:p-8">
-        <div className="flex gap-2 mb-6 items-center">
-          <div className="relative flex-1">
+        <div className="flex flex-wrap gap-2 mb-6 items-center">
+          <div className="relative flex-1 min-w-[200px]">
             <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
               <Search className="h-4 w-4 text-muted-foreground" />
             </div>
@@ -140,6 +150,19 @@ export default function MaterialsPage() {
               autoComplete="off"
             />
           </div>
+          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Todas as categorias" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as categorias</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category.id} value={category.name}>
+                  {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Link href="/expenses-products">
             <Button variant="outline" className="font-medium">
               <DollarSign className="h-4 w-4 mr-2" />
@@ -206,6 +229,7 @@ export default function MaterialsPage() {
           onEdit={handleEdit}
           onDelete={handleDelete}
           searchQuery={searchQuery}
+          selectedCategory={selectedCategory}
         />
 
         <MaterialForm
