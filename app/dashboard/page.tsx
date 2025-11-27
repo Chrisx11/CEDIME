@@ -15,8 +15,20 @@ import {
   School, 
   Package, 
   FileText, 
-  AlertTriangle
+  AlertTriangle,
+  Search,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -40,6 +52,10 @@ export default function DashboardPage() {
   const { requests, isLoading: isLoadingRequests } = useRequests()
 
   const [isLowStockDialogOpen, setIsLowStockDialogOpen] = React.useState(false)
+  const [searchQuery, setSearchQuery] = React.useState('')
+  const [selectedCategory, setSelectedCategory] = React.useState<string>('all')
+  const [sortColumn, setSortColumn] = React.useState<keyof typeof materials[0] | null>(null)
+  const [sortDirection, setSortDirection] = React.useState<'asc' | 'desc'>('asc')
 
   const isLoading = isLoadingSuppliers || isLoadingInstitutions || isLoadingMaterials || isLoadingRequests
 
@@ -56,6 +72,77 @@ export default function DashboardPage() {
   
   // Requisições pendentes
   const pendingRequests = requests.filter(r => r.status === 'pending')
+
+  // Obter categorias únicas dos itens com estoque baixo
+  const availableCategories = React.useMemo(() => {
+    const categories = new Set(
+      lowStockItems.map(item => item.category)
+    )
+    return Array.from(categories).sort()
+  }, [lowStockItems])
+
+  // Filtrar e ordenar itens com estoque baixo
+  const filteredAndSortedItems = React.useMemo(() => {
+    let filtered = lowStockItems
+
+    // Filtro de pesquisa
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      filtered = filtered.filter(item =>
+        item.name.toLowerCase().includes(query) ||
+        item.category.toLowerCase().includes(query) ||
+        item.unit.toLowerCase().includes(query)
+      )
+    }
+
+    // Filtro de categoria
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(item => item.category === selectedCategory)
+    }
+
+    // Ordenação
+    if (sortColumn) {
+      filtered = [...filtered].sort((a, b) => {
+        const aValue = a[sortColumn]
+        const bValue = b[sortColumn]
+        
+        if (aValue === null || aValue === undefined) return 1
+        if (bValue === null || bValue === undefined) return -1
+        
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return sortDirection === 'asc'
+            ? aValue.localeCompare(bValue)
+            : bValue.localeCompare(aValue)
+        }
+        
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return sortDirection === 'asc' ? aValue - bValue : bValue - aValue
+        }
+        
+        return 0
+      })
+    }
+
+    return filtered
+  }, [lowStockItems, searchQuery, selectedCategory, sortColumn, sortDirection])
+
+  const handleSort = (column: keyof typeof materials[0]) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  const SortIcon = ({ column }: { column: keyof typeof materials[0] }) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="h-4 w-4 ml-1 opacity-50" />
+    }
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="h-4 w-4 ml-1" />
+      : <ArrowDown className="h-4 w-4 ml-1" />
+  }
 
   // Dados para gráfico de requisições por status
   const statusData = [
@@ -223,8 +310,16 @@ export default function DashboardPage() {
         )}
 
         {/* Diálogo de Estoque Baixo */}
-        <Dialog open={isLowStockDialogOpen} onOpenChange={setIsLowStockDialogOpen}>
-          <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+        <Dialog open={isLowStockDialogOpen} onOpenChange={(open) => {
+          setIsLowStockDialogOpen(open)
+          if (!open) {
+            setSearchQuery('')
+            setSelectedCategory('all')
+            setSortColumn(null)
+            setSortDirection('asc')
+          }
+        }}>
+          <DialogContent className="sm:max-w-[95vw] lg:max-w-[1200px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
@@ -233,7 +328,7 @@ export default function DashboardPage() {
                 <div>
                   <DialogTitle className="text-xl">Itens com Estoque Baixo</DialogTitle>
                   <DialogDescription className="mt-1">
-                    {lowStockItems.length} item(ns) com estoque abaixo ou igual ao mínimo
+                    {filteredAndSortedItems.length} de {lowStockItems.length} item(ns) com estoque abaixo ou igual ao mínimo
                   </DialogDescription>
                 </div>
               </div>
@@ -244,37 +339,114 @@ export default function DashboardPage() {
                 Nenhum item com estoque baixo no momento.
               </div>
             ) : (
-              <div className="mt-4">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Categoria</TableHead>
-                      <TableHead>Estoque</TableHead>
-                      <TableHead>Mínimo</TableHead>
-                      <TableHead>Unidade</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {lowStockItems.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium">{item.name}</TableCell>
-                        <TableCell>{item.category}</TableCell>
-                        <TableCell>{item.quantity}</TableCell>
-                        <TableCell>{item.min_quantity}</TableCell>
-                        <TableCell>
-                          {item.unit.charAt(0).toUpperCase() + item.unit.slice(1)}
-                        </TableCell>
-                        <TableCell>
-                          <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
-                            Estoque Baixo
-                          </span>
-                        </TableCell>
+              <div className="mt-4 space-y-4">
+                {/* Filtros e Pesquisa */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Pesquisar por nome, categoria ou unidade..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                    <SelectTrigger className="w-full sm:w-[200px]">
+                      <SelectValue placeholder="Todas as categorias" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as categorias</SelectItem>
+                      {availableCategories.map((category) => (
+                        <SelectItem key={category} value={category}>
+                          {category}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Tabela */}
+                <div className="overflow-x-auto border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead 
+                          className="min-w-[200px] cursor-pointer hover:bg-muted/50"
+                          onClick={() => handleSort('name')}
+                        >
+                          <div className="flex items-center">
+                            Nome
+                            <SortIcon column="name" />
+                          </div>
+                        </TableHead>
+                        <TableHead 
+                          className="min-w-[150px] cursor-pointer hover:bg-muted/50"
+                          onClick={() => handleSort('category')}
+                        >
+                          <div className="flex items-center">
+                            Categoria
+                            <SortIcon column="category" />
+                          </div>
+                        </TableHead>
+                        <TableHead 
+                          className="min-w-[100px] text-right cursor-pointer hover:bg-muted/50"
+                          onClick={() => handleSort('quantity')}
+                        >
+                          <div className="flex items-center justify-end">
+                            Estoque
+                            <SortIcon column="quantity" />
+                          </div>
+                        </TableHead>
+                        <TableHead 
+                          className="min-w-[100px] text-right cursor-pointer hover:bg-muted/50"
+                          onClick={() => handleSort('min_quantity')}
+                        >
+                          <div className="flex items-center justify-end">
+                            Mínimo
+                            <SortIcon column="min_quantity" />
+                          </div>
+                        </TableHead>
+                        <TableHead 
+                          className="min-w-[100px] cursor-pointer hover:bg-muted/50"
+                          onClick={() => handleSort('unit')}
+                        >
+                          <div className="flex items-center">
+                            Unidade
+                            <SortIcon column="unit" />
+                          </div>
+                        </TableHead>
+                        <TableHead className="min-w-[120px]">Status</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredAndSortedItems.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                            Nenhum item encontrado com os filtros aplicados.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredAndSortedItems.map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell className="font-medium">{item.name}</TableCell>
+                            <TableCell>{item.category}</TableCell>
+                            <TableCell className="text-right">{item.quantity}</TableCell>
+                            <TableCell className="text-right">{item.min_quantity}</TableCell>
+                            <TableCell>
+                              {item.unit.charAt(0).toUpperCase() + item.unit.slice(1)}
+                            </TableCell>
+                            <TableCell>
+                              <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                                Estoque Baixo
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             )}
           </DialogContent>
