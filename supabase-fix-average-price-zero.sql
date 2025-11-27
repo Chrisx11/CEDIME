@@ -1,8 +1,8 @@
--- Triggers para atualizar automaticamente o estoque quando saídas forem criadas/atualizadas/excluídas
+-- Script para corrigir o cálculo do preço médio
+-- Quando não houver entradas, o preço médio deve ser zerado
 -- Execute este SQL no SQL Editor do Supabase
--- NOTA: Este trigger atualiza a função existente update_material_stock_and_price() para considerar saídas
 
--- Atualizar a função para considerar saídas (já deve existir, mas garantimos que está atualizada)
+-- Atualizar a função para zerar o preço médio quando não houver entradas
 CREATE OR REPLACE FUNCTION update_material_stock_and_price()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -43,6 +43,7 @@ BEGIN
   WHERE material_id = material_id_to_update;
 
   IF total_quantity > 0 THEN
+    -- Se houver entradas, calcular a média ponderada
     average_price := total_value / total_quantity;
   ELSE
     -- Se não houver entradas, zerar o preço médio
@@ -61,28 +62,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Triggers para outputs (INSERT, UPDATE, DELETE)
--- Trigger para INSERT (criar saída)
-DROP TRIGGER IF EXISTS trigger_update_material_on_output_insert ON outputs;
-CREATE TRIGGER trigger_update_material_on_output_insert
-  AFTER INSERT ON outputs
-  FOR EACH ROW
-  EXECUTE FUNCTION update_material_stock_and_price();
-
--- Trigger para UPDATE (atualizar saída)
-DROP TRIGGER IF EXISTS trigger_update_material_on_output_update ON outputs;
-CREATE TRIGGER trigger_update_material_on_output_update
-  AFTER UPDATE ON outputs
-  FOR EACH ROW
-  EXECUTE FUNCTION update_material_stock_and_price();
-
--- Trigger para DELETE (excluir saída)
-DROP TRIGGER IF EXISTS trigger_update_material_on_output_delete ON outputs;
-CREATE TRIGGER trigger_update_material_on_output_delete
-  AFTER DELETE ON outputs
-  FOR EACH ROW
-  EXECUTE FUNCTION update_material_stock_and_price();
-
--- Comentário
-COMMENT ON FUNCTION update_material_stock_and_price() IS 'Atualiza automaticamente o estoque e preço médio do material quando entradas ou saídas são criadas, atualizadas ou excluídas';
+-- Comentário atualizado
+COMMENT ON FUNCTION update_material_stock_and_price() IS 'Atualiza automaticamente o estoque e preço médio do material. Quando não houver entradas, o preço médio é zerado.';
 

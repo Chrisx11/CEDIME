@@ -101,7 +101,14 @@ export function MaterialList({ materials, onEdit, onDelete, searchQuery }: Mater
                       <TableCell>
                         {material.unit.charAt(0).toUpperCase() + material.unit.slice(1)}
                       </TableCell>
-                      <TableCell>R$ {averagePrice.toFixed(2)}</TableCell>
+                      <TableCell>
+                        {new Intl.NumberFormat('pt-BR', {
+                          style: 'currency',
+                          currency: 'BRL',
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        }).format(averagePrice)}
+                      </TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 text-xs rounded-full ${
                           isLow

@@ -49,14 +49,8 @@ BEGIN
   IF total_quantity > 0 THEN
     average_price := total_value / total_quantity;
   ELSE
-    -- Se não houver entradas, manter o preço atual ou usar 0
-    SELECT unit_price INTO average_price
-    FROM materials
-    WHERE id = material_id_to_update;
-    
-    IF average_price IS NULL THEN
-      average_price := 0;
-    END IF;
+    -- Se não houver entradas, zerar o preço médio
+    average_price := 0;
   END IF;
 
   -- Atualizar o material

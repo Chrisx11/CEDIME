@@ -16,11 +16,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { FileText, Download, FileSpreadsheet, File, Tag, Ruler, Search, DollarSign } from 'lucide-react'
+import { FileText, Download, FileSpreadsheet, File, Tag, Ruler, Search, DollarSign, Upload } from 'lucide-react'
 import Link from 'next/link'
 import { exportMaterialsToExcel, exportMaterialsToPDF } from '@/lib/export-utils'
 import { CategoryDialog } from '@/components/materials/category-dialog'
 import { UnitDialog } from '@/components/materials/unit-dialog'
+import { ImportMaterialsDialog } from '@/components/materials/import-materials-dialog'
 
 // Função para converter Material do Supabase para o formato esperado pelos componentes
 function convertMaterial(material: MaterialType): Material {
@@ -37,10 +38,11 @@ function convertMaterial(material: MaterialType): Material {
 }
 
 export default function MaterialsPage() {
-  const { materials: supabaseMaterials, addMaterial, updateMaterial, deleteMaterial, isLoading } = useMaterials()
+  const { materials: supabaseMaterials, addMaterial, updateMaterial, deleteMaterial, isLoading, refreshMaterials } = useMaterials()
   const [isFormVisible, setIsFormVisible] = useState(false)
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false)
   const [isUnitDialogOpen, setIsUnitDialogOpen] = useState(false)
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const { toast } = useToast()
@@ -233,6 +235,14 @@ export default function MaterialsPage() {
       <UnitDialog
         isOpen={isUnitDialogOpen}
         onClose={() => setIsUnitDialogOpen(false)}
+      />
+
+      <ImportMaterialsDialog
+        isOpen={isImportDialogOpen}
+        onClose={() => setIsImportDialogOpen(false)}
+        onImportComplete={() => {
+          refreshMaterials()
+        }}
       />
     </AuthLayout>
   )

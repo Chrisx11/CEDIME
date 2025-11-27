@@ -167,8 +167,9 @@ export function exportMaterialsToExcel(materials: Material[]) {
   const data = materials.map(material => ({
     'Nome': material.name,
     'Categoria': getCategoryLabel(material.category),
-    'Estoque': `${material.quantity} ${material.unit}`,
-    'Estoque Mínimo': `${material.minQuantity} ${material.unit}`,
+    'Estoque': material.quantity,
+    'Unidade': material.unit,
+    'Estoque Mínimo': material.minQuantity,
     'Valor Unitário': material.unitPrice.toFixed(2),
     'Valor Total': (material.quantity * material.unitPrice).toFixed(2),
     'Status': material.quantity <= material.minQuantity ? 'Estoque Baixo' : 'Normal',
@@ -183,8 +184,9 @@ export function exportMaterialsToExcel(materials: Material[]) {
   const colWidths = [
     { wch: 30 }, // Nome
     { wch: 20 }, // Categoria
-    { wch: 15 }, // Estoque
-    { wch: 15 }, // Mínimo
+    { wch: 12 }, // Estoque
+    { wch: 12 }, // Unidade
+    { wch: 15 }, // Estoque Mínimo
     { wch: 12 }, // Valor Unit.
     { wch: 12 }, // Valor Total
     { wch: 15 }, // Status
