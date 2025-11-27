@@ -32,8 +32,10 @@ export default function DashboardPage() {
   // Filtrar instituições ativas
   const activeInstitutions = institutions.filter(i => i.status === 'active')
 
-  // Materiais com estoque baixo
-  const lowStockItems = materials.filter(m => m.quantity <= m.min_quantity)
+  // Materiais com estoque baixo (excluindo ALIMENTO PERECÍVEL)
+  const lowStockItems = materials.filter(
+    m => m.quantity <= m.min_quantity && m.category !== 'ALIMENTO PERECÍVEL'
+  )
   
   // Requisições pendentes
   const pendingRequests = requests.filter(r => r.status === 'pending')
