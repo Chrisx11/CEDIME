@@ -21,6 +21,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { FileText, Download, FileSpreadsheet, File, Search } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { exportExpensesByInstitutionsToExcel, exportExpensesByInstitutionsToPDF } from '@/lib/export-utils'
@@ -45,24 +52,49 @@ export default function ExpensesInstitutionsPage() {
   const { outputs, isLoading: isLoadingOutputs } = useOutputs()
   const { materials, isLoading: isLoadingMaterials } = useMaterials()
   const [searchQuery, setSearchQuery] = useState('')
+  const currentYear = new Date().getFullYear()
+  const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear())
+  const [selectedInstitutionId, setSelectedInstitutionId] = useState<string>('all')
   const { toast } = useToast()
 
   const isLoading = isLoadingInstitutions || isLoadingOutputs || isLoadingMaterials
 
+  // Obter lista de anos disponíveis baseado nas saídas
+  const availableYears = useMemo(() => {
+    const years = new Set<number>()
+    outputs.forEach(output => {
+      const date = new Date(output.output_date)
+      years.add(date.getFullYear())
+    })
+    // Sempre incluir o ano atual (recalculado a cada vez para garantir que está atualizado)
+    const now = new Date()
+    const currentYearNow = now.getFullYear()
+    years.add(currentYearNow)
+    return Array.from(years).sort((a, b) => b - a) // Ordenar do mais recente para o mais antigo
+  }, [outputs])
+
   const filteredInstitutions = useMemo(() => {
-    if (!searchQuery || searchQuery.trim() === '') {
-      return institutions
+    let filtered = institutions
+
+    // Filtrar por instituição selecionada no dropdown
+    if (selectedInstitutionId && selectedInstitutionId !== 'all') {
+      filtered = filtered.filter(institution => institution.id === selectedInstitutionId)
     }
 
-    const query = searchQuery.trim().toLowerCase()
-    return institutions.filter(institution => {
-      const nameMatch = institution.name.toLowerCase().includes(query)
-      const cityMatch = institution.city.toLowerCase().includes(query)
-      const stateMatch = institution.state?.toLowerCase().includes(query) || false
-      const principalMatch = institution.principal_name.toLowerCase().includes(query)
-      return nameMatch || cityMatch || stateMatch || principalMatch
-    })
-  }, [institutions, searchQuery])
+    // Filtrar por pesquisa na barra
+    if (searchQuery && searchQuery.trim() !== '') {
+      const query = searchQuery.trim().toLowerCase()
+      filtered = filtered.filter(institution => {
+        const nameMatch = institution.name.toLowerCase().includes(query)
+        const cityMatch = institution.city.toLowerCase().includes(query)
+        const stateMatch = institution.state?.toLowerCase().includes(query) || false
+        const principalMatch = institution.principal_name.toLowerCase().includes(query)
+        return nameMatch || cityMatch || stateMatch || principalMatch
+      })
+    }
+
+    return filtered
+  }, [institutions, searchQuery, selectedInstitutionId])
 
 
   // Calcular despesas por instituição e mês
@@ -75,10 +107,9 @@ export default function ExpensesInstitutionsPage() {
       const date = new Date(output.output_date)
       const month = date.getMonth() // 0-11
       const year = date.getFullYear()
-      const currentYear = new Date().getFullYear()
       
-      // Só considerar saídas do ano atual
-      if (year !== currentYear) return
+      // Só considerar saídas do ano selecionado
+      if (year !== selectedYear) return
       
       // Buscar preço unitário do material
       const material = materials.find(m => m.id === output.material_id)
@@ -97,7 +128,7 @@ export default function ExpensesInstitutionsPage() {
     })
     
     return expenses
-  }, [outputs, materials])
+  }, [outputs, materials, selectedYear])
 
   // Função para formatar valor em reais
   const formatCurrency = (value: number) => {
@@ -120,6 +151,31 @@ export default function ExpensesInstitutionsPage() {
     if (!institutionExpenses) return 0
     return Object.values(institutionExpenses).reduce((sum, value) => sum + value, 0)
   }
+
+  // Calcular totais gerais por mês (apenas das instituições filtradas)
+  const getTotalByMonth = useMemo(() => {
+    const totals: number[] = new Array(12).fill(0)
+    
+    // Calcular totais apenas das instituições filtradas
+    filteredInstitutions.forEach(institution => {
+      const institutionExpenses = expensesByInstitution[institution.id]
+      if (institutionExpenses) {
+        Object.entries(institutionExpenses).forEach(([monthIndex, value]) => {
+          const month = parseInt(monthIndex)
+          if (month >= 0 && month < 12) {
+            totals[month] += value
+          }
+        })
+      }
+    })
+    
+    return totals
+  }, [expensesByInstitution, filteredInstitutions])
+
+  // Calcular total geral do ano
+  const getTotalYear = useMemo(() => {
+    return getTotalByMonth.reduce((sum, value) => sum + value, 0)
+  }, [getTotalByMonth])
 
   if (isLoading) {
     return (
@@ -150,6 +206,37 @@ export default function ExpensesInstitutionsPage() {
               autoComplete="off"
             />
           </div>
+          <Select
+            value={selectedInstitutionId}
+            onValueChange={(value) => setSelectedInstitutionId(value)}
+          >
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Todas as instituições" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as instituições</SelectItem>
+              {institutions.map((institution) => (
+                <SelectItem key={institution.id} value={institution.id}>
+                  {institution.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={selectedYear.toString()}
+            onValueChange={(value) => setSelectedYear(parseInt(value))}
+          >
+            <SelectTrigger className="w-[120px]">
+              <SelectValue placeholder="Ano" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableYears.map((year) => (
+                <SelectItem key={year} value={year.toString()}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="font-medium">
@@ -161,9 +248,18 @@ export default function ExpensesInstitutionsPage() {
             <DropdownMenuContent align="end">
               <DropdownMenuItem
                 onClick={() => {
+                  const selectedInstitution = selectedInstitutionId !== 'all' 
+                    ? institutions.find(i => i.id === selectedInstitutionId)
+                    : undefined
+                  
                   exportExpensesByInstitutionsToExcel(
                     filteredInstitutions.map(i => ({ id: i.id, name: i.name })),
-                    expensesByInstitution
+                    expensesByInstitution,
+                    getTotalByMonth,
+                    getTotalYear,
+                    selectedYear,
+                    selectedInstitution?.name,
+                    searchQuery.trim() !== '' ? searchQuery : undefined
                   )
                   toast({
                     title: 'Exportação concluída',
@@ -176,9 +272,18 @@ export default function ExpensesInstitutionsPage() {
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {
+                  const selectedInstitution = selectedInstitutionId !== 'all' 
+                    ? institutions.find(i => i.id === selectedInstitutionId)
+                    : undefined
+                  
                   exportExpensesByInstitutionsToPDF(
                     filteredInstitutions.map(i => ({ id: i.id, name: i.name })),
-                    expensesByInstitution
+                    expensesByInstitution,
+                    getTotalByMonth,
+                    getTotalYear,
+                    selectedYear,
+                    selectedInstitution?.name,
+                    searchQuery.trim() !== '' ? searchQuery : undefined
                   )
                   toast({
                     title: 'Exportação concluída',
@@ -216,21 +321,37 @@ export default function ExpensesInstitutionsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredInstitutions.map((institution) => (
-                    <TableRow key={institution.id}>
-                      <TableCell className="font-medium text-sm">
-                        {institution.name}
+                  <>
+                    {filteredInstitutions.map((institution) => (
+                      <TableRow key={institution.id}>
+                        <TableCell className="font-medium text-sm">
+                          {institution.name}
+                        </TableCell>
+                        {months.map((month, index) => (
+                          <TableCell key={month} className="text-center px-2 text-xs">
+                            {formatCurrency(getMonthValue(institution.id, index))}
+                          </TableCell>
+                        ))}
+                        <TableCell className="text-center font-semibold px-2 text-xs">
+                          {formatCurrency(getTotalValue(institution.id))}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {/* Linha de totais gerais */}
+                    <TableRow className="bg-muted/50 font-semibold">
+                      <TableCell className="font-bold text-sm">
+                        Total Geral
                       </TableCell>
                       {months.map((month, index) => (
-                        <TableCell key={month} className="text-center px-2 text-xs">
-                          {formatCurrency(getMonthValue(institution.id, index))}
+                        <TableCell key={month} className="text-center font-bold px-2 text-xs">
+                          {formatCurrency(getTotalByMonth[index])}
                         </TableCell>
                       ))}
-                      <TableCell className="text-center font-semibold px-2 text-xs">
-                        {formatCurrency(getTotalValue(institution.id))}
+                      <TableCell className="text-center font-bold px-2 text-xs">
+                        {formatCurrency(getTotalYear)}
                       </TableCell>
                     </TableRow>
-                  ))
+                  </>
                 )}
               </TableBody>
             </Table>

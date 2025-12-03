@@ -60,9 +60,29 @@ export default function ExpensesProductsPage() {
   const [selectedInstitutionId, setSelectedInstitutionId] = useState<string>('all')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [viewMode, setViewMode] = useState<'values' | 'quantities' | 'complete'>('values')
+  const currentYear = new Date().getFullYear()
+  const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear())
   const { toast } = useToast()
 
   const isLoading = isLoadingMaterials || isLoadingEntries || isLoadingInstitutions || isLoadingOutputs
+
+  // Obter lista de anos disponíveis baseado nas entradas e saídas
+  const availableYears = useMemo(() => {
+    const years = new Set<number>()
+    entries.forEach(entry => {
+      const date = new Date(entry.entry_date)
+      years.add(date.getFullYear())
+    })
+    outputs.forEach(output => {
+      const date = new Date(output.output_date)
+      years.add(date.getFullYear())
+    })
+    // Sempre incluir o ano atual (recalculado a cada vez para garantir que está atualizado)
+    const now = new Date()
+    const currentYearNow = now.getFullYear()
+    years.add(currentYearNow)
+    return Array.from(years).sort((a, b) => b - a) // Ordenar do mais recente para o mais antigo
+  }, [entries, outputs])
 
   // Identificar produtos entregues para a instituição selecionada
   const materialsByInstitution = useMemo(() => {
@@ -121,10 +141,9 @@ export default function ExpensesProductsPage() {
         const date = new Date(output.output_date)
         const month = date.getMonth() // 0-11
         const year = date.getFullYear()
-        const currentYear = new Date().getFullYear()
         
-        // Só considerar saídas do ano atual
-        if (year !== currentYear) return
+        // Só considerar saídas do ano selecionado
+        if (year !== selectedYear) return
         
         // Buscar preço unitário do material
         const material = materials.find(m => m.id === output.material_id)
@@ -147,10 +166,9 @@ export default function ExpensesProductsPage() {
         const date = new Date(entry.entry_date)
         const month = date.getMonth() // 0-11
         const year = date.getFullYear()
-        const currentYear = new Date().getFullYear()
         
-        // Só considerar entradas do ano atual
-        if (year !== currentYear) return
+        // Só considerar entradas do ano selecionado
+        if (year !== selectedYear) return
         
         const value = entry.quantity * entry.unit_price
         
@@ -167,7 +185,7 @@ export default function ExpensesProductsPage() {
     }
     
     return expenses
-  }, [entries, outputs, selectedInstitutionId, materials])
+  }, [entries, outputs, selectedInstitutionId, materials, selectedYear])
 
   // Calcular quantidades por produto e mês
   // Se "Todas as Instituições": baseado em entradas
@@ -184,10 +202,9 @@ export default function ExpensesProductsPage() {
         const date = new Date(output.output_date)
         const month = date.getMonth() // 0-11
         const year = date.getFullYear()
-        const currentYear = new Date().getFullYear()
         
-        // Só considerar saídas do ano atual
-        if (year !== currentYear) return
+        // Só considerar saídas do ano selecionado
+        if (year !== selectedYear) return
         
         if (!quantities[output.material_id]) {
           quantities[output.material_id] = {}
@@ -205,10 +222,9 @@ export default function ExpensesProductsPage() {
         const date = new Date(entry.entry_date)
         const month = date.getMonth() // 0-11
         const year = date.getFullYear()
-        const currentYear = new Date().getFullYear()
         
-        // Só considerar entradas do ano atual
-        if (year !== currentYear) return
+        // Só considerar entradas do ano selecionado
+        if (year !== selectedYear) return
         
         if (!quantities[entry.material_id]) {
           quantities[entry.material_id] = {}
@@ -223,7 +239,7 @@ export default function ExpensesProductsPage() {
     }
     
     return quantities
-  }, [entries, outputs, selectedInstitutionId])
+  }, [entries, outputs, selectedInstitutionId, selectedYear])
 
   // Função para formatar valor em reais
   const formatCurrency = (value: number) => {
@@ -266,6 +282,56 @@ export default function ExpensesProductsPage() {
       maximumFractionDigits: 2,
     }).format(value)
   }
+
+  // Calcular totais gerais por mês (valores)
+  const getTotalByMonth = useMemo(() => {
+    const totals: number[] = new Array(12).fill(0)
+    
+    // Calcular totais apenas dos materiais filtrados
+    filteredMaterials.forEach(material => {
+      const materialExpenses = expensesByMaterial[material.id]
+      if (materialExpenses) {
+        Object.entries(materialExpenses).forEach(([monthIndex, value]) => {
+          const month = parseInt(monthIndex)
+          if (month >= 0 && month < 12) {
+            totals[month] += value
+          }
+        })
+      }
+    })
+    
+    return totals
+  }, [expensesByMaterial, filteredMaterials])
+
+  // Calcular totais gerais por mês (quantidades)
+  const getTotalQuantityByMonth = useMemo(() => {
+    const totals: number[] = new Array(12).fill(0)
+    
+    // Calcular totais apenas dos materiais filtrados
+    filteredMaterials.forEach(material => {
+      const materialQuantities = quantitiesByMaterial[material.id]
+      if (materialQuantities) {
+        Object.entries(materialQuantities).forEach(([monthIndex, qty]) => {
+          const month = parseInt(monthIndex)
+          if (month >= 0 && month < 12) {
+            totals[month] += qty
+          }
+        })
+      }
+    })
+    
+    return totals
+  }, [quantitiesByMaterial, filteredMaterials])
+
+  // Calcular total geral do ano (valor)
+  const getTotalYear = useMemo(() => {
+    return getTotalByMonth.reduce((sum, value) => sum + value, 0)
+  }, [getTotalByMonth])
+
+  // Calcular total geral do ano (quantidade)
+  const getTotalQuantityYear = useMemo(() => {
+    return getTotalQuantityByMonth.reduce((sum, value) => sum + value, 0)
+  }, [getTotalQuantityByMonth])
 
   if (isLoading) {
     return (
@@ -323,6 +389,21 @@ export default function ExpensesProductsPage() {
               ))}
             </SelectContent>
           </Select>
+          <Select
+            value={selectedYear.toString()}
+            onValueChange={(value) => setSelectedYear(parseInt(value))}
+          >
+            <SelectTrigger className="w-[120px]">
+              <SelectValue placeholder="Ano" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableYears.map((year) => (
+                <SelectItem key={year} value={year.toString()}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="font-medium">
@@ -367,7 +448,14 @@ export default function ExpensesProductsPage() {
                     expensesByMaterial,
                     quantitiesByMaterial,
                     viewMode,
-                    selectedInstitution?.name
+                    selectedInstitution?.name,
+                    getTotalByMonth,
+                    getTotalYear,
+                    getTotalQuantityByMonth,
+                    getTotalQuantityYear,
+                    selectedYear,
+                    selectedCategory !== 'all' ? selectedCategory : undefined,
+                    searchQuery.trim() !== '' ? searchQuery : undefined
                   )
                   toast({
                     title: 'Exportação concluída',
@@ -389,7 +477,14 @@ export default function ExpensesProductsPage() {
                     expensesByMaterial,
                     quantitiesByMaterial,
                     viewMode,
-                    selectedInstitution?.name
+                    selectedInstitution?.name,
+                    getTotalByMonth,
+                    getTotalYear,
+                    getTotalQuantityByMonth,
+                    getTotalQuantityYear,
+                    selectedYear,
+                    selectedCategory !== 'all' ? selectedCategory : undefined,
+                    searchQuery.trim() !== '' ? searchQuery : undefined
                   )
                   toast({
                     title: 'Exportação concluída',
@@ -472,57 +567,109 @@ export default function ExpensesProductsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredMaterials.map((material) => (
-                    <TableRow key={material.id}>
-                      <TableCell className="font-medium text-sm">
-                        {material.name}
+                  <>
+                    {filteredMaterials.map((material) => (
+                      <TableRow key={material.id}>
+                        <TableCell className="font-medium text-sm">
+                          {material.name}
+                        </TableCell>
+                        {months.map((month, index) => {
+                          if (viewMode === 'complete') {
+                            return (
+                              <React.Fragment key={month}>
+                                <TableCell className="text-center px-2 text-xs border-x">
+                                  {formatQuantity(getMonthQuantity(material.id, index))}
+                                </TableCell>
+                                <TableCell className="text-center px-2 text-xs">
+                                  {formatCurrency(getMonthValue(material.id, index))}
+                                </TableCell>
+                              </React.Fragment>
+                            )
+                          } else if (viewMode === 'quantities') {
+                            return (
+                              <TableCell key={month} className="text-center px-2 text-xs">
+                                {formatQuantity(getMonthQuantity(material.id, index))}
+                              </TableCell>
+                            )
+                          } else {
+                            return (
+                              <TableCell key={month} className="text-center px-2 text-xs">
+                                {formatCurrency(getMonthValue(material.id, index))}
+                              </TableCell>
+                            )
+                          }
+                        })}
+                        {viewMode === 'complete' ? (
+                          <>
+                            <TableCell className="text-center font-semibold px-2 text-xs border-x">
+                              {formatQuantity(getTotalQuantity(material.id))}
+                            </TableCell>
+                            <TableCell className="text-center font-semibold px-2 text-xs">
+                              {formatCurrency(getTotalValue(material.id))}
+                            </TableCell>
+                          </>
+                        ) : viewMode === 'quantities' ? (
+                          <TableCell className="text-center font-semibold px-2 text-xs">
+                            {formatQuantity(getTotalQuantity(material.id))}
+                          </TableCell>
+                        ) : (
+                          <TableCell className="text-center font-semibold px-2 text-xs">
+                            {formatCurrency(getTotalValue(material.id))}
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                    {/* Linha de totais gerais */}
+                    <TableRow className="bg-muted/50 font-semibold">
+                      <TableCell className="font-bold text-sm">
+                        Total Geral
                       </TableCell>
                       {months.map((month, index) => {
                         if (viewMode === 'complete') {
                           return (
                             <React.Fragment key={month}>
-                              <TableCell className="text-center px-2 text-xs border-x">
-                                {formatQuantity(getMonthQuantity(material.id, index))}
+                              <TableCell className="text-center font-bold px-2 text-xs border-x">
+                                {formatQuantity(getTotalQuantityByMonth[index])}
                               </TableCell>
-                              <TableCell className="text-center px-2 text-xs">
-                                {formatCurrency(getMonthValue(material.id, index))}
+                              <TableCell className="text-center font-bold px-2 text-xs">
+                                {formatCurrency(getTotalByMonth[index])}
                               </TableCell>
                             </React.Fragment>
                           )
                         } else if (viewMode === 'quantities') {
                           return (
-                            <TableCell key={month} className="text-center px-2 text-xs">
-                              {formatQuantity(getMonthQuantity(material.id, index))}
+                            <TableCell key={month} className="text-center font-bold px-2 text-xs">
+                              {formatQuantity(getTotalQuantityByMonth[index])}
                             </TableCell>
                           )
                         } else {
                           return (
-                            <TableCell key={month} className="text-center px-2 text-xs">
-                              {formatCurrency(getMonthValue(material.id, index))}
+                            <TableCell key={month} className="text-center font-bold px-2 text-xs">
+                              {formatCurrency(getTotalByMonth[index])}
                             </TableCell>
                           )
                         }
                       })}
                       {viewMode === 'complete' ? (
                         <>
-                          <TableCell className="text-center font-semibold px-2 text-xs border-x">
-                            {formatQuantity(getTotalQuantity(material.id))}
+                          <TableCell className="text-center font-bold px-2 text-xs border-x">
+                            {formatQuantity(getTotalQuantityYear)}
                           </TableCell>
-                          <TableCell className="text-center font-semibold px-2 text-xs">
-                            {formatCurrency(getTotalValue(material.id))}
+                          <TableCell className="text-center font-bold px-2 text-xs">
+                            {formatCurrency(getTotalYear)}
                           </TableCell>
                         </>
                       ) : viewMode === 'quantities' ? (
-                        <TableCell className="text-center font-semibold px-2 text-xs">
-                          {formatQuantity(getTotalQuantity(material.id))}
+                        <TableCell className="text-center font-bold px-2 text-xs">
+                          {formatQuantity(getTotalQuantityYear)}
                         </TableCell>
                       ) : (
-                        <TableCell className="text-center font-semibold px-2 text-xs">
-                          {formatCurrency(getTotalValue(material.id))}
+                        <TableCell className="text-center font-bold px-2 text-xs">
+                          {formatCurrency(getTotalYear)}
                         </TableCell>
                       )}
                     </TableRow>
-                  ))
+                  </>
                 )}
               </TableBody>
             </Table>

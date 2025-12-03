@@ -42,14 +42,46 @@ export async function middleware(request: NextRequest) {
 
     const {
       data: { user },
+      error,
     } = await supabase.auth.getUser()
+
+    // Se há erro de autenticação (ex: refresh token inválido), limpar cookies e redirecionar
+    if (error) {
+      // Limpar todos os cookies de autenticação do Supabase
+      const allCookies = request.cookies.getAll()
+      allCookies.forEach((cookie) => {
+        if (cookie.name.includes('sb-') || cookie.name.includes('supabase')) {
+          response.cookies.delete(cookie.name)
+        }
+      })
+      
+      // Se for erro de refresh token, redirecionar para login
+      if (error.message?.includes('Refresh Token') || 
+          error.message?.includes('JWT') ||
+          error.message?.includes('refresh_token_not_found')) {
+        return NextResponse.redirect(new URL('/login', request.url))
+      }
+    }
 
     // Se não há usuário em rota protegida, redirecionar para login
     if (!user) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
-  } catch (error) {
-    // Em caso de erro, permitir acesso para não quebrar a aplicação
+  } catch (error: any) {
+    // Em caso de erro de refresh token, limpar cookies e redirecionar
+    if (error?.message?.includes('Refresh Token') || 
+        error?.message?.includes('JWT') ||
+        error?.message?.includes('refresh_token_not_found')) {
+      // Limpar todos os cookies de autenticação do Supabase
+      const allCookies = request.cookies.getAll()
+      allCookies.forEach((cookie) => {
+        if (cookie.name.includes('sb-') || cookie.name.includes('supabase')) {
+          response.cookies.delete(cookie.name)
+        }
+      })
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+    // Para outros erros, apenas logar e continuar
     console.error('Erro no middleware:', error)
   }
 

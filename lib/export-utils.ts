@@ -366,7 +366,9 @@ const formatCurrency = (value: number) => {
 
 export function exportExpensesBySuppliersToExcel(
   suppliers: { id: string; name: string }[],
-  expensesBySupplier: ExpenseData
+  expensesBySupplier: ExpenseData,
+  totalsByMonth?: number[],
+  totalYear?: number
 ) {
   const data = suppliers.map(supplier => {
     const row: Record<string, string> = {
@@ -384,9 +386,56 @@ export function exportExpensesBySuppliersToExcel(
     return row
   })
 
+  // Adicionar linha de totais gerais
+  if (totalsByMonth && totalYear !== undefined) {
+    const totalRow: Record<string, string> = {
+      'Fornecedor': 'Total Geral',
+    }
+    
+    months.forEach((month, index) => {
+      totalRow[month] = formatCurrency(totalsByMonth[index] || 0)
+    })
+    
+    totalRow['Total'] = formatCurrency(totalYear)
+    data.push(totalRow)
+  }
+
   const worksheet = XLSX.utils.json_to_sheet(data)
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Despesas por Fornecedor')
+
+  // Estilizar a linha de totais (última linha)
+  if (totalsByMonth && totalYear !== undefined) {
+    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1')
+    const totalRowIndex = range.e.r // Última linha
+    
+    // Aplicar estilo em negrito na linha de totais
+    months.forEach((_, index) => {
+      const cellAddress = XLSX.utils.encode_cell({ r: totalRowIndex, c: index + 1 })
+      if (worksheet[cellAddress]) {
+        worksheet[cellAddress].s = {
+          font: { bold: true },
+          fill: { fgColor: { rgb: 'E5E7EB' } }
+        }
+      }
+    })
+    
+    // Estilizar coluna "Fornecedor" e "Total" da linha de totais
+    const supplierCell = XLSX.utils.encode_cell({ r: totalRowIndex, c: 0 })
+    const totalCell = XLSX.utils.encode_cell({ r: totalRowIndex, c: months.length + 1 })
+    if (worksheet[supplierCell]) {
+      worksheet[supplierCell].s = {
+        font: { bold: true },
+        fill: { fgColor: { rgb: 'E5E7EB' } }
+      }
+    }
+    if (worksheet[totalCell]) {
+      worksheet[totalCell].s = {
+        font: { bold: true },
+        fill: { fgColor: { rgb: 'E5E7EB' } }
+      }
+    }
+  }
 
   // Ajustar largura das colunas
   const colWidths = [
@@ -401,7 +450,9 @@ export function exportExpensesBySuppliersToExcel(
 
 export function exportExpensesBySuppliersToPDF(
   suppliers: { id: string; name: string }[],
-  expensesBySupplier: ExpenseData
+  expensesBySupplier: ExpenseData,
+  totalsByMonth?: number[],
+  totalYear?: number
 ) {
   const doc = new jsPDF('landscape', 'mm', 'a4')
   
@@ -428,6 +479,16 @@ export function exportExpensesBySuppliersToPDF(
     return row
   })
 
+  // Adicionar linha de totais gerais
+  if (totalsByMonth && totalYear !== undefined) {
+    const totalRow = ['Total Geral']
+    months.forEach((month, index) => {
+      totalRow.push(formatCurrency(totalsByMonth[index] || 0))
+    })
+    totalRow.push(formatCurrency(totalYear))
+    tableData.push(totalRow)
+  }
+
   const headers = ['Fornecedor', ...months, 'Total']
 
   autoTable(doc, {
@@ -437,6 +498,14 @@ export function exportExpensesBySuppliersToPDF(
     styles: { fontSize: 7 },
     headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [249, 250, 251] },
+    didParseCell: (data) => {
+      // Estilizar a linha de totais (última linha do body)
+      if (totalsByMonth && totalYear !== undefined && data.row.index === tableData.length - 1) {
+        data.cell.styles.fillColor = [229, 231, 235] // Cor de fundo cinza
+        data.cell.styles.fontStyle = 'bold'
+        data.cell.styles.textColor = [0, 0, 0]
+      }
+    },
     margin: { top: 28, left: 14, right: 14 }
   })
 
@@ -458,7 +527,12 @@ export function exportExpensesBySuppliersToPDF(
 
 export function exportExpensesByInstitutionsToExcel(
   institutions: { id: string; name: string }[],
-  expensesByInstitution: ExpenseData
+  expensesByInstitution: ExpenseData,
+  totalsByMonth?: number[],
+  totalYear?: number,
+  selectedYear?: number,
+  selectedInstitutionName?: string,
+  searchQuery?: string
 ) {
   const data = institutions.map(institution => {
     const row: Record<string, string> = {
@@ -476,9 +550,73 @@ export function exportExpensesByInstitutionsToExcel(
     return row
   })
 
+  // Adicionar linha de totais gerais
+  if (totalsByMonth && totalYear !== undefined) {
+    const totalRow: Record<string, string> = {
+      'Instituição': 'Total Geral',
+    }
+    
+    months.forEach((month, index) => {
+      totalRow[month] = formatCurrency(totalsByMonth[index] || 0)
+    })
+    
+    totalRow['Total'] = formatCurrency(totalYear)
+    data.push(totalRow)
+  }
+
   const worksheet = XLSX.utils.json_to_sheet(data)
   const workbook = XLSX.utils.book_new()
+  
+  // Adicionar informações de filtros se houver
+  const infoRows: string[][] = []
+  if (selectedYear) {
+    infoRows.push(['Ano: ' + selectedYear])
+  }
+  if (selectedInstitutionName) {
+    infoRows.push(['Filtro: Instituição - ' + selectedInstitutionName])
+  }
+  if (searchQuery && searchQuery.trim() !== '') {
+    infoRows.push(['Pesquisa: ' + searchQuery])
+  }
+  
+  if (infoRows.length > 0) {
+    XLSX.utils.sheet_add_aoa(worksheet, infoRows, { origin: -1 })
+  }
+  
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Despesas por Instituição')
+
+  // Estilizar a linha de totais (última linha)
+  if (totalsByMonth && totalYear !== undefined) {
+    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1')
+    const totalRowIndex = range.e.r // Última linha
+    
+    // Aplicar estilo em negrito na linha de totais
+    months.forEach((_, index) => {
+      const cellAddress = XLSX.utils.encode_cell({ r: totalRowIndex, c: index + 1 })
+      if (worksheet[cellAddress]) {
+        worksheet[cellAddress].s = {
+          font: { bold: true },
+          fill: { fgColor: { rgb: 'E5E7EB' } }
+        }
+      }
+    })
+    
+    // Estilizar coluna "Instituição" e "Total" da linha de totais
+    const institutionCell = XLSX.utils.encode_cell({ r: totalRowIndex, c: 0 })
+    const totalCell = XLSX.utils.encode_cell({ r: totalRowIndex, c: months.length + 1 })
+    if (worksheet[institutionCell]) {
+      worksheet[institutionCell].s = {
+        font: { bold: true },
+        fill: { fgColor: { rgb: 'E5E7EB' } }
+      }
+    }
+    if (worksheet[totalCell]) {
+      worksheet[totalCell].s = {
+        font: { bold: true },
+        fill: { fgColor: { rgb: 'E5E7EB' } }
+      }
+    }
+  }
 
   // Ajustar largura das colunas
   const colWidths = [
@@ -493,7 +631,12 @@ export function exportExpensesByInstitutionsToExcel(
 
 export function exportExpensesByInstitutionsToPDF(
   institutions: { id: string; name: string }[],
-  expensesByInstitution: ExpenseData
+  expensesByInstitution: ExpenseData,
+  totalsByMonth?: number[],
+  totalYear?: number,
+  selectedYear?: number,
+  selectedInstitutionName?: string,
+  searchQuery?: string
 ) {
   const doc = new jsPDF('landscape', 'mm', 'a4')
   
@@ -501,9 +644,25 @@ export function exportExpensesByInstitutionsToPDF(
   doc.setFontSize(18)
   doc.text('Despesas por Instituição - CEDIME', 14, 15)
   
-  // Data de geração
+  // Informações de filtros e data
+  let yPos = 22
   doc.setFontSize(10)
-  doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`, 14, 22)
+  doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`, 14, yPos)
+  
+  if (selectedYear) {
+    yPos += 5
+    doc.text(`Ano: ${selectedYear}`, 14, yPos)
+  }
+  
+  if (selectedInstitutionName) {
+    yPos += 5
+    doc.text(`Filtro: Instituição - ${selectedInstitutionName}`, 14, yPos)
+  }
+  
+  if (searchQuery && searchQuery.trim() !== '') {
+    yPos += 5
+    doc.text(`Pesquisa: ${searchQuery}`, 14, yPos)
+  }
   
   // Tabela
   const tableData = institutions.map(institution => {
@@ -520,16 +679,34 @@ export function exportExpensesByInstitutionsToPDF(
     return row
   })
 
+  // Adicionar linha de totais gerais
+  if (totalsByMonth && totalYear !== undefined) {
+    const totalRow = ['Total Geral']
+    months.forEach((month, index) => {
+      totalRow.push(formatCurrency(totalsByMonth[index] || 0))
+    })
+    totalRow.push(formatCurrency(totalYear))
+    tableData.push(totalRow)
+  }
+
   const headers = ['Instituição', ...months, 'Total']
 
   autoTable(doc, {
     head: [headers],
     body: tableData,
-    startY: 28,
+    startY: yPos + 5,
     styles: { fontSize: 7 },
     headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [249, 250, 251] },
-    margin: { top: 28, left: 14, right: 14 }
+    didParseCell: (data) => {
+      // Estilizar a linha de totais (última linha do body)
+      if (totalsByMonth && totalYear !== undefined && data.row.index === tableData.length - 1) {
+        data.cell.styles.fillColor = [229, 231, 235] // Cor de fundo cinza
+        data.cell.styles.fontStyle = 'bold'
+        data.cell.styles.textColor = [0, 0, 0]
+      }
+    },
+    margin: { top: yPos + 5, left: 14, right: 14 }
   })
 
   // Rodapé
@@ -553,7 +730,14 @@ export function exportExpensesByProductsToExcel(
   expensesByMaterial: ExpenseData,
   quantitiesByMaterial?: ExpenseData,
   viewMode: 'values' | 'quantities' | 'complete' = 'values',
-  selectedInstitutionName?: string
+  selectedInstitutionName?: string,
+  totalsByMonth?: number[],
+  totalYear?: number,
+  totalQuantityByMonth?: number[],
+  totalQuantityYear?: number,
+  selectedYear?: number,
+  selectedCategory?: string,
+  searchQuery?: string
 ) {
   const formatQuantity = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -604,13 +788,60 @@ export function exportExpensesByProductsToExcel(
     return row
   })
 
+  // Adicionar linha de totais gerais
+  if (viewMode === 'complete' && totalsByMonth && totalYear !== undefined && totalQuantityByMonth && totalQuantityYear !== undefined) {
+    const totalRow: Record<string, string> = {
+      'Produto': 'Total Geral',
+    }
+    
+    months.forEach((month, index) => {
+      totalRow[`${month} - Qtd`] = formatQuantity(totalQuantityByMonth[index] || 0)
+      totalRow[`${month} - Valor`] = formatCurrency(totalsByMonth[index] || 0)
+    })
+    
+    totalRow['Total - Qtd'] = formatQuantity(totalQuantityYear)
+    totalRow['Total - Valor'] = formatCurrency(totalYear)
+    data.push(totalRow)
+  } else if (viewMode === 'quantities' && totalQuantityByMonth && totalQuantityYear !== undefined) {
+    const totalRow: Record<string, string> = {
+      'Produto': 'Total Geral',
+    }
+    
+    months.forEach((month, index) => {
+      totalRow[month] = formatQuantity(totalQuantityByMonth[index] || 0)
+    })
+    
+    totalRow['Total'] = formatQuantity(totalQuantityYear)
+    data.push(totalRow)
+  } else if (viewMode === 'values' && totalsByMonth && totalYear !== undefined) {
+    const totalRow: Record<string, string> = {
+      'Produto': 'Total Geral',
+    }
+    
+    months.forEach((month, index) => {
+      totalRow[month] = formatCurrency(totalsByMonth[index] || 0)
+    })
+    
+    totalRow['Total'] = formatCurrency(totalYear)
+    data.push(totalRow)
+  }
+
   const worksheet = XLSX.utils.json_to_sheet(data)
   const workbook = XLSX.utils.book_new()
   
   // Adicionar informações de filtro e modo se houver
   const infoRows: string[][] = []
+  if (selectedYear) {
+    infoRows.push(['Ano: ' + selectedYear])
+  }
   if (selectedInstitutionName) {
     infoRows.push(['Filtro: Instituição - ' + selectedInstitutionName])
+  }
+  if (selectedCategory && selectedCategory !== 'all') {
+    infoRows.push(['Filtro: Categoria - ' + selectedCategory])
+  }
+  if (searchQuery && searchQuery.trim() !== '') {
+    infoRows.push(['Pesquisa: ' + searchQuery])
   }
   const modeLabel = viewMode === 'values' ? 'Valores' : viewMode === 'quantities' ? 'Quantidades' : 'Completo'
   infoRows.push(['Modo de visualização: ' + modeLabel])
@@ -620,6 +851,28 @@ export function exportExpensesByProductsToExcel(
   }
   
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Despesas por Produto')
+
+  // Estilizar a linha de totais (última linha)
+  if ((viewMode === 'complete' && totalsByMonth && totalYear !== undefined && totalQuantityByMonth && totalQuantityYear !== undefined) ||
+      (viewMode === 'quantities' && totalQuantityByMonth && totalQuantityYear !== undefined) ||
+      (viewMode === 'values' && totalsByMonth && totalYear !== undefined)) {
+    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1')
+    const totalRowIndex = range.e.r // Última linha
+    
+    // Aplicar estilo em negrito na linha de totais
+    const startCol = 0
+    const endCol = viewMode === 'complete' ? months.length * 2 + 2 : months.length + 1
+    
+    for (let col = startCol; col <= endCol; col++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: totalRowIndex, c: col })
+      if (worksheet[cellAddress]) {
+        worksheet[cellAddress].s = {
+          font: { bold: true },
+          fill: { fgColor: { rgb: 'E5E7EB' } }
+        }
+      }
+    }
+  }
 
   // Ajustar largura das colunas
   const colWidths = viewMode === 'complete'
@@ -648,7 +901,14 @@ export function exportExpensesByProductsToPDF(
   expensesByMaterial: ExpenseData,
   quantitiesByMaterial?: ExpenseData,
   viewMode: 'values' | 'quantities' | 'complete' = 'values',
-  selectedInstitutionName?: string
+  selectedInstitutionName?: string,
+  totalsByMonth?: number[],
+  totalYear?: number,
+  totalQuantityByMonth?: number[],
+  totalQuantityYear?: number,
+  selectedYear?: number,
+  selectedCategory?: string,
+  searchQuery?: string
 ) {
   const formatQuantity = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -668,9 +928,24 @@ export function exportExpensesByProductsToPDF(
   doc.setFontSize(10)
   doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`, 14, yPos)
   
+  if (selectedYear) {
+    yPos += 5
+    doc.text(`Ano: ${selectedYear}`, 14, yPos)
+  }
+  
   if (selectedInstitutionName) {
     yPos += 5
     doc.text(`Filtro: Instituição - ${selectedInstitutionName}`, 14, yPos)
+  }
+  
+  if (selectedCategory && selectedCategory !== 'all') {
+    yPos += 5
+    doc.text(`Filtro: Categoria - ${selectedCategory}`, 14, yPos)
+  }
+  
+  if (searchQuery && searchQuery.trim() !== '') {
+    yPos += 5
+    doc.text(`Pesquisa: ${searchQuery}`, 14, yPos)
   }
   
   yPos += 5
@@ -736,6 +1011,32 @@ export function exportExpensesByProductsToPDF(
     })
   }
 
+  // Adicionar linha de totais gerais
+  if (viewMode === 'complete' && totalsByMonth && totalYear !== undefined && totalQuantityByMonth && totalQuantityYear !== undefined) {
+    const totalRow: (string | number)[] = ['Total Geral']
+    months.forEach((month, index) => {
+      totalRow.push(formatQuantity(totalQuantityByMonth[index] || 0))
+      totalRow.push(formatCurrency(totalsByMonth[index] || 0))
+    })
+    totalRow.push(formatQuantity(totalQuantityYear))
+    totalRow.push(formatCurrency(totalYear))
+    tableData.push(totalRow)
+  } else if (viewMode === 'quantities' && totalQuantityByMonth && totalQuantityYear !== undefined) {
+    const totalRow: (string | number)[] = ['Total Geral']
+    months.forEach((month, index) => {
+      totalRow.push(formatQuantity(totalQuantityByMonth[index] || 0))
+    })
+    totalRow.push(formatQuantity(totalQuantityYear))
+    tableData.push(totalRow)
+  } else if (viewMode === 'values' && totalsByMonth && totalYear !== undefined) {
+    const totalRow: (string | number)[] = ['Total Geral']
+    months.forEach((month, index) => {
+      totalRow.push(formatCurrency(totalsByMonth[index] || 0))
+    })
+    totalRow.push(formatCurrency(totalYear))
+    tableData.push(totalRow)
+  }
+
   autoTable(doc, {
     head: [headers],
     body: tableData,
@@ -743,6 +1044,18 @@ export function exportExpensesByProductsToPDF(
     styles: { fontSize: viewMode === 'complete' ? 6 : 7 },
     headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [249, 250, 251] },
+    didParseCell: (data) => {
+      // Estilizar a linha de totais (última linha do body)
+      const isTotalRow = (viewMode === 'complete' && totalsByMonth && totalYear !== undefined && totalQuantityByMonth && totalQuantityYear !== undefined && data.row.index === tableData.length - 1) ||
+                         (viewMode === 'quantities' && totalQuantityByMonth && totalQuantityYear !== undefined && data.row.index === tableData.length - 1) ||
+                         (viewMode === 'values' && totalsByMonth && totalYear !== undefined && data.row.index === tableData.length - 1)
+      
+      if (isTotalRow) {
+        data.cell.styles.fillColor = [229, 231, 235] // Cor de fundo cinza
+        data.cell.styles.fontStyle = 'bold'
+        data.cell.styles.textColor = [0, 0, 0]
+      }
+    },
     margin: { top: yPos + 5, left: 14, right: 14 }
   })
 

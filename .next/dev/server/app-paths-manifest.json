@@ -1,9 +1,15 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
   "/dashboard/page": "app/dashboard/page.js",
+  "/deliveries/page": "app/deliveries/page.js",
   "/entries/page": "app/entries/page.js",
+  "/expenses-institutions/page": "app/expenses-institutions/page.js",
   "/expenses-products/page": "app/expenses-products/page.js",
+  "/expenses-suppliers/page": "app/expenses-suppliers/page.js",
+  "/institutions/page": "app/institutions/page.js",
   "/login/page": "app/login/page.js",
   "/materials/page": "app/materials/page.js",
-  "/page": "app/page.js"
+  "/outputs/page": "app/outputs/page.js",
+  "/page": "app/page.js",
+  "/requests/page": "app/requests/page.js",
+  "/suppliers/page": "app/suppliers/page.js"
 }

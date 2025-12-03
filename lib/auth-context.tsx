@@ -29,12 +29,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Verificar sessão atual
     const checkSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        // Se há erro de refresh token, limpar sessão localmente
+        if (error) {
+          if (error.message?.includes('Refresh Token') || 
+              error.message?.includes('JWT') ||
+              error.message?.includes('refresh_token_not_found')) {
+            // Limpar sessão inválida - o middleware cuidará do redirecionamento
+            setUser(null)
+            return
+          }
+        }
+        
         if (session?.user) {
           setUser(mapSupabaseUserToUser(session.user))
+        } else {
+          setUser(null)
         }
-      } catch (error) {
-        console.error('Erro ao verificar sessão:', error)
+      } catch (error: any) {
+        // Se for erro de refresh token, limpar sessão localmente
+        if (error?.message?.includes('Refresh Token') || 
+            error?.message?.includes('JWT') ||
+            error?.message?.includes('refresh_token_not_found')) {
+          // Limpar sessão inválida - o middleware cuidará do redirecionamento
+          setUser(null)
+        } else {
+          console.error('Erro ao verificar sessão:', error)
+        }
       } finally {
         setIsLoading(false)
       }
@@ -45,7 +67,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Escutar mudanças na autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (session?.user) {
+        // Ignorar erros de refresh token no listener
+        if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+          if (session?.user) {
+            setUser(mapSupabaseUserToUser(session.user))
+          } else {
+            setUser(null)
+          }
+        } else if (session?.user) {
           setUser(mapSupabaseUserToUser(session.user))
         } else {
           setUser(null)

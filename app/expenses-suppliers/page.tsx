@@ -20,6 +20,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { FileText, Download, FileSpreadsheet, File, Search } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { exportExpensesBySuppliersToExcel, exportExpensesBySuppliersToPDF } from '@/lib/export-utils'
@@ -43,9 +50,25 @@ export default function ExpensesSuppliersPage() {
   const { suppliers, isLoading: isLoadingSuppliers } = useSuppliers()
   const { entries, isLoading: isLoadingEntries } = useEntries()
   const [searchQuery, setSearchQuery] = useState('')
+  // Inicializar com o ano atual
+  const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear())
   const { toast } = useToast()
 
   const isLoading = isLoadingSuppliers || isLoadingEntries
+
+  // Obter lista de anos disponíveis baseado nas entradas
+  const availableYears = useMemo(() => {
+    const years = new Set<number>()
+    entries.forEach(entry => {
+      const date = new Date(entry.entry_date)
+      years.add(date.getFullYear())
+    })
+    // Sempre incluir o ano atual (recalculado a cada vez para garantir que está atualizado)
+    const now = new Date()
+    const currentYearNow = now.getFullYear()
+    years.add(currentYearNow)
+    return Array.from(years).sort((a, b) => b - a) // Ordenar do mais recente para o mais antigo
+  }, [entries])
 
   const filteredSuppliers = useMemo(() => {
     if (!searchQuery || searchQuery.trim() === '') {
@@ -72,10 +95,9 @@ export default function ExpensesSuppliersPage() {
       const date = new Date(entry.entry_date)
       const month = date.getMonth() // 0-11
       const year = date.getFullYear()
-      const currentYear = new Date().getFullYear()
       
-      // Só considerar entradas do ano atual
-      if (year !== currentYear) return
+      // Só considerar entradas do ano selecionado
+      if (year !== selectedYear) return
       
       const value = entry.quantity * entry.unit_price
       
@@ -91,7 +113,7 @@ export default function ExpensesSuppliersPage() {
     })
     
     return expenses
-  }, [entries])
+  }, [entries, selectedYear])
 
   // Função para formatar valor em reais
   const formatCurrency = (value: number) => {
@@ -114,6 +136,27 @@ export default function ExpensesSuppliersPage() {
     if (!supplierExpenses) return 0
     return Object.values(supplierExpenses).reduce((sum, value) => sum + value, 0)
   }
+
+  // Calcular totais gerais por mês
+  const getTotalByMonth = useMemo(() => {
+    const totals: number[] = new Array(12).fill(0)
+    
+    Object.values(expensesBySupplier).forEach((supplierExpenses) => {
+      Object.entries(supplierExpenses).forEach(([monthIndex, value]) => {
+        const month = parseInt(monthIndex)
+        if (month >= 0 && month < 12) {
+          totals[month] += value
+        }
+      })
+    })
+    
+    return totals
+  }, [expensesBySupplier])
+
+  // Calcular total geral do ano
+  const getTotalYear = useMemo(() => {
+    return getTotalByMonth.reduce((sum, value) => sum + value, 0)
+  }, [getTotalByMonth])
 
   if (isLoading) {
     return (
@@ -144,6 +187,21 @@ export default function ExpensesSuppliersPage() {
               autoComplete="off"
             />
           </div>
+          <Select
+            value={selectedYear.toString()}
+            onValueChange={(value) => setSelectedYear(parseInt(value))}
+          >
+            <SelectTrigger className="w-[120px]">
+              <SelectValue placeholder="Ano" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableYears.map((year) => (
+                <SelectItem key={year} value={year.toString()}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="font-medium">
@@ -157,7 +215,9 @@ export default function ExpensesSuppliersPage() {
                 onClick={() => {
                   exportExpensesBySuppliersToExcel(
                     filteredSuppliers.map(s => ({ id: s.id, name: s.name })),
-                    expensesBySupplier
+                    expensesBySupplier,
+                    getTotalByMonth,
+                    getTotalYear
                   )
                   toast({
                     title: 'Exportação concluída',
@@ -172,7 +232,9 @@ export default function ExpensesSuppliersPage() {
                 onClick={() => {
                   exportExpensesBySuppliersToPDF(
                     filteredSuppliers.map(s => ({ id: s.id, name: s.name })),
-                    expensesBySupplier
+                    expensesBySupplier,
+                    getTotalByMonth,
+                    getTotalYear
                   )
                   toast({
                     title: 'Exportação concluída',
@@ -210,21 +272,37 @@ export default function ExpensesSuppliersPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredSuppliers.map((supplier) => (
-                    <TableRow key={supplier.id}>
-                      <TableCell className="font-medium text-sm">
-                        {supplier.name}
+                  <>
+                    {filteredSuppliers.map((supplier) => (
+                      <TableRow key={supplier.id}>
+                        <TableCell className="font-medium text-sm">
+                          {supplier.name}
+                        </TableCell>
+                        {months.map((month, index) => (
+                          <TableCell key={month} className="text-center px-2 text-xs">
+                            {formatCurrency(getMonthValue(supplier.id, index))}
+                          </TableCell>
+                        ))}
+                        <TableCell className="text-center font-semibold px-2 text-xs">
+                          {formatCurrency(getTotalValue(supplier.id))}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {/* Linha de totais gerais */}
+                    <TableRow className="bg-muted/50 font-semibold">
+                      <TableCell className="font-bold text-sm">
+                        Total Geral
                       </TableCell>
                       {months.map((month, index) => (
-                        <TableCell key={month} className="text-center px-2 text-xs">
-                          {formatCurrency(getMonthValue(supplier.id, index))}
+                        <TableCell key={month} className="text-center font-bold px-2 text-xs">
+                          {formatCurrency(getTotalByMonth[index])}
                         </TableCell>
                       ))}
-                      <TableCell className="text-center font-semibold px-2 text-xs">
-                        {formatCurrency(getTotalValue(supplier.id))}
+                      <TableCell className="text-center font-bold px-2 text-xs">
+                        {formatCurrency(getTotalYear)}
                       </TableCell>
                     </TableRow>
-                  ))
+                  </>
                 )}
               </TableBody>
             </Table>
