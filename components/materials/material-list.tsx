@@ -12,7 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Card } from '@/components/ui/card'
-import { Edit, Trash2, MoreVertical, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Edit, Trash2, MoreVertical, ArrowUpDown, ArrowUp, ArrowDown, Package } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,11 +24,12 @@ interface MaterialListProps {
   materials: Material[]
   onEdit: (material: Material) => void
   onDelete: (id: string) => void
+  onAdjustStock?: (material: Material) => void
   searchQuery: string
   selectedCategory: string
 }
 
-export function MaterialList({ materials, onEdit, onDelete, searchQuery, selectedCategory }: MaterialListProps) {
+export function MaterialList({ materials, onEdit, onDelete, onAdjustStock, searchQuery, selectedCategory }: MaterialListProps) {
   const [sortColumn, setSortColumn] = useState<keyof Material | null>(null)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
 
@@ -233,6 +234,12 @@ export function MaterialList({ materials, onEdit, onDelete, searchQuery, selecte
                                 <Edit className="h-4 w-4 mr-2" />
                                 Editar
                               </DropdownMenuItem>
+                              {onAdjustStock && (
+                                <DropdownMenuItem onClick={() => onAdjustStock(material)}>
+                                  <Package className="h-4 w-4 mr-2" />
+                                  Ajustar Estoque
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem
                                 onClick={() => onDelete(material.id)}
                                 variant="destructive"

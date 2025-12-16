@@ -6,6 +6,7 @@ import { Material } from '@/lib/data-context'
 import { AuthLayout } from '@/components/auth-layout'
 import { MaterialForm } from '@/components/materials/material-form'
 import { MaterialList } from '@/components/materials/material-list'
+import { AdjustStockDialog } from '@/components/materials/adjust-stock-dialog'
 import { Button } from '@/components/ui/button'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -52,7 +53,9 @@ export default function MaterialsPage() {
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false)
   const [isUnitDialogOpen, setIsUnitDialogOpen] = useState(false)
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
+  const [isAdjustStockDialogOpen, setIsAdjustStockDialogOpen] = useState(false)
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null)
+  const [adjustingStockMaterial, setAdjustingStockMaterial] = useState<Material | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const { toast } = useToast()
@@ -118,6 +121,25 @@ export default function MaterialsPage() {
       } catch (error) {
         // Erro já foi tratado no hook
       }
+    }
+  }
+
+  const handleAdjustStock = (material: Material) => {
+    setAdjustingStockMaterial(material)
+    setIsAdjustStockDialogOpen(true)
+  }
+
+  const handleConfirmAdjustStock = async (newQuantity: number) => {
+    if (!adjustingStockMaterial) return
+
+    try {
+      await updateMaterial(adjustingStockMaterial.id, {
+        quantity: newQuantity,
+      })
+      setIsAdjustStockDialogOpen(false)
+      setAdjustingStockMaterial(null)
+    } catch (error) {
+      // Erro já foi tratado no hook
     }
   }
 
@@ -236,6 +258,7 @@ export default function MaterialsPage() {
           materials={materials}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          onAdjustStock={handleAdjustStock}
           searchQuery={searchQuery}
           selectedCategory={selectedCategory}
         />
@@ -275,6 +298,16 @@ export default function MaterialsPage() {
         onImportComplete={() => {
           refreshMaterials()
         }}
+      />
+
+      <AdjustStockDialog
+        material={adjustingStockMaterial}
+        isOpen={isAdjustStockDialogOpen}
+        onClose={() => {
+          setIsAdjustStockDialogOpen(false)
+          setAdjustingStockMaterial(null)
+        }}
+        onConfirm={handleConfirmAdjustStock}
       />
     </AuthLayout>
   )
