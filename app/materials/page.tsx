@@ -220,6 +220,14 @@ export default function MaterialsPage() {
             <Ruler className="h-4 w-4 mr-2" />
             Unidades
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => setIsImportDialogOpen(true)}
+            className="font-medium"
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Importar
+          </Button>
           <Button onClick={handleAddNew} className="bg-primary hover:bg-primary/90 font-medium">
             Novo Material
           </Button>
