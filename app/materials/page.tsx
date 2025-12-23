@@ -7,6 +7,7 @@ import { AuthLayout } from '@/components/auth-layout'
 import { MaterialForm } from '@/components/materials/material-form'
 import { MaterialList } from '@/components/materials/material-list'
 import { AdjustStockDialog } from '@/components/materials/adjust-stock-dialog'
+import { AdjustPriceDialog } from '@/components/materials/adjust-price-dialog'
 import { Button } from '@/components/ui/button'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -54,8 +55,10 @@ export default function MaterialsPage() {
   const [isUnitDialogOpen, setIsUnitDialogOpen] = useState(false)
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
   const [isAdjustStockDialogOpen, setIsAdjustStockDialogOpen] = useState(false)
+  const [isAdjustPriceDialogOpen, setIsAdjustPriceDialogOpen] = useState(false)
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null)
   const [adjustingStockMaterial, setAdjustingStockMaterial] = useState<Material | null>(null)
+  const [adjustingPriceMaterial, setAdjustingPriceMaterial] = useState<Material | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const { toast } = useToast()
@@ -138,6 +141,25 @@ export default function MaterialsPage() {
       })
       setIsAdjustStockDialogOpen(false)
       setAdjustingStockMaterial(null)
+    } catch (error) {
+      // Erro já foi tratado no hook
+    }
+  }
+
+  const handleAdjustPrice = (material: Material) => {
+    setAdjustingPriceMaterial(material)
+    setIsAdjustPriceDialogOpen(true)
+  }
+
+  const handleConfirmAdjustPrice = async (newPrice: number) => {
+    if (!adjustingPriceMaterial) return
+
+    try {
+      await updateMaterial(adjustingPriceMaterial.id, {
+        unit_price: newPrice,
+      })
+      setIsAdjustPriceDialogOpen(false)
+      setAdjustingPriceMaterial(null)
     } catch (error) {
       // Erro já foi tratado no hook
     }
@@ -259,6 +281,7 @@ export default function MaterialsPage() {
           onEdit={handleEdit}
           onDelete={handleDelete}
           onAdjustStock={handleAdjustStock}
+          onAdjustPrice={handleAdjustPrice}
           searchQuery={searchQuery}
           selectedCategory={selectedCategory}
         />
@@ -308,6 +331,16 @@ export default function MaterialsPage() {
           setAdjustingStockMaterial(null)
         }}
         onConfirm={handleConfirmAdjustStock}
+      />
+
+      <AdjustPriceDialog
+        material={adjustingPriceMaterial}
+        isOpen={isAdjustPriceDialogOpen}
+        onClose={() => {
+          setIsAdjustPriceDialogOpen(false)
+          setAdjustingPriceMaterial(null)
+        }}
+        onConfirm={handleConfirmAdjustPrice}
       />
     </AuthLayout>
   )
