@@ -18,7 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { FileText, Download, FileSpreadsheet, File, Tag, Ruler, Search, DollarSign, Upload } from 'lucide-react'
+import { FileText, Download, FileSpreadsheet, File, Tag, Ruler, Search, DollarSign, Upload, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { exportMaterialsToExcel, exportMaterialsToPDF } from '@/lib/export-utils'
 import { CategoryDialog } from '@/components/materials/category-dialog'
@@ -32,24 +32,31 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useCategories } from '@/hooks/use-categories'
+import { useEntries } from '@/hooks/use-entries'
+import { useOutputs } from '@/hooks/use-outputs'
 
 // Função para converter Material do Supabase para o formato esperado pelos componentes
 function convertMaterial(material: MaterialType): Material {
   return {
     id: material.id,
-    name: material.name,
-    category: material.category,
-    unit: material.unit,
-    quantity: material.quantity,
-    minQuantity: material.min_quantity,
-    unitPrice: material.unit_price,
-    lastUpdate: material.last_update,
+    name: material.name || '',
+    category: material.category || '',
+    unit: material.unit || '',
+    quantity: Number(material.quantity) || 0,
+    minQuantity: Number(material.min_quantity) || 0,
+    unitPrice: Number(material.unit_price) || 0,
+    lastUpdate: material.last_update || new Date().toISOString(),
   }
 }
 
 export default function MaterialsPage() {
+  // Flag para mostrar/ocultar botões temporários
+  const SHOW_TEMP_BUTTONS = false
+  
   const { materials: supabaseMaterials, addMaterial, updateMaterial, deleteMaterial, isLoading, refreshMaterials } = useMaterials()
   const { categories } = useCategories()
+  const { addEntry } = useEntries()
+  const { addOutput } = useOutputs()
   const [isFormVisible, setIsFormVisible] = useState(false)
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false)
   const [isUnitDialogOpen, setIsUnitDialogOpen] = useState(false)
@@ -135,14 +142,94 @@ export default function MaterialsPage() {
   const handleConfirmAdjustStock = async (newQuantity: number) => {
     if (!adjustingStockMaterial) return
 
+    const currentQuantity = adjustingStockMaterial.quantity
+    const quantityDifference = newQuantity - currentQuantity
+    const entryDate = new Date().toISOString().split('T')[0]
+
     try {
-      await updateMaterial(adjustingStockMaterial.id, {
-        quantity: newQuantity,
-      })
+      // Se a quantidade diminuiu, criar saída automática
+      if (quantityDifference < 0) {
+        const outputQuantity = Math.abs(quantityDifference)
+        try {
+          await addOutput({
+            material_id: adjustingStockMaterial.id,
+            material_name: adjustingStockMaterial.name,
+            quantity: outputQuantity,
+            unit: adjustingStockMaterial.unit,
+            institution_id: null,
+            institution_name: null,
+            reason: 'Ajuste de estoque',
+            responsible: 'Sistema',
+            output_date: entryDate
+          })
+          toast({
+            title: 'Ajuste realizado',
+            description: `Saída de ${outputQuantity} ${adjustingStockMaterial.unit} criada automaticamente. O estoque será atualizado.`,
+          })
+        } catch (error) {
+          console.error('Erro ao criar saída automática:', error)
+          toast({
+            title: 'Erro',
+            description: 'Não foi possível criar a saída automaticamente.',
+            variant: 'destructive',
+          })
+          return
+        }
+      }
+      // Se a quantidade aumentou, criar entrada automática
+      else if (quantityDifference > 0) {
+        try {
+          const entryPrice = adjustingStockMaterial.unitPrice || 0
+          await addEntry({
+            material_id: adjustingStockMaterial.id,
+            material_name: adjustingStockMaterial.name,
+            quantity: quantityDifference,
+            unit: adjustingStockMaterial.unit,
+            unit_price: entryPrice,
+            supplier_id: undefined,
+            supplier_name: undefined,
+            reason: 'Ajuste de estoque',
+            responsible: 'Sistema',
+            entry_date: entryDate
+          })
+          toast({
+            title: 'Ajuste realizado',
+            description: `Entrada de ${quantityDifference} ${adjustingStockMaterial.unit} criada automaticamente. O estoque será atualizado.`,
+          })
+        } catch (error) {
+          console.error('Erro ao criar entrada automática:', error)
+          toast({
+            title: 'Erro',
+            description: 'Não foi possível criar a entrada automaticamente.',
+            variant: 'destructive',
+          })
+          return
+        }
+      }
+      // Se a quantidade não mudou, apenas informar
+      else {
+        toast({
+          title: 'Sem alteração',
+          description: 'A quantidade informada é igual à quantidade atual.',
+        })
+      }
+
       setIsAdjustStockDialogOpen(false)
       setAdjustingStockMaterial(null)
+      
+      // Atualizar materiais após um delay para garantir que os triggers processaram
+      setTimeout(() => {
+        refreshMaterials()
+        window.dispatchEvent(new CustomEvent('entriesUpdated'))
+        window.dispatchEvent(new CustomEvent('outputsUpdated'))
+      }, 1000)
     } catch (error) {
-      // Erro já foi tratado no hook
+      console.error('Erro ao ajustar estoque:', error)
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível realizar o ajuste de estoque.',
+        variant: 'destructive',
+      })
     }
   }
 
@@ -162,6 +249,36 @@ export default function MaterialsPage() {
       setAdjustingPriceMaterial(null)
     } catch (error) {
       // Erro já foi tratado no hook
+    }
+  }
+
+  const handleZeroStock = async () => {
+    const confirmed = await confirmDialog.confirm({
+      title: 'Zerar Estoque',
+      description: `Tem certeza que deseja zerar o estoque de TODOS os materiais? Esta ação não pode ser desfeita.`,
+      confirmText: 'Zerar Estoque',
+      cancelText: 'Cancelar',
+      variant: 'destructive',
+    })
+
+    if (confirmed) {
+      try {
+        // Zerar estoque de todos os materiais
+        const promises = materials.map(material => 
+          updateMaterial(material.id, { quantity: 0 })
+        )
+        await Promise.all(promises)
+        toast({
+          title: 'Sucesso',
+          description: 'Estoque de todos os materiais foi zerado.',
+        })
+      } catch (error) {
+        toast({
+          title: 'Erro',
+          description: 'Não foi possível zerar o estoque de todos os materiais.',
+          variant: 'destructive',
+        })
+      }
     }
   }
 
@@ -275,6 +392,17 @@ export default function MaterialsPage() {
           <Button onClick={handleAddNew} className="bg-primary hover:bg-primary/90 font-medium">
             Novo Material
           </Button>
+          {SHOW_TEMP_BUTTONS && (
+            <Button 
+              onClick={handleZeroStock} 
+              variant="destructive"
+              className="font-medium"
+              title="TEMPORÁRIO - Zerar estoque de todos os materiais"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              TEMPORÁRIO: Zerar Estoque
+            </Button>
+          )}
         </div>
         <MaterialList
           materials={materials}

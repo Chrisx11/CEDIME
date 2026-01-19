@@ -12,6 +12,7 @@ import { OutputForm } from '@/components/outputs/output-form'
 import { useToast } from '@/hooks/use-toast'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { Trash2 } from 'lucide-react'
 
 // Função para converter Output do Supabase para o formato esperado pelos componentes
 function convertOutput(output: OutputType): Output {
@@ -37,7 +38,10 @@ function convertOutput(output: OutputType): Output {
 }
 
 export default function OutputsPage() {
-  const { outputs: supabaseOutputs, addOutput, updateOutput, deleteOutput, isLoading } = useOutputs()
+  // Flag para mostrar/ocultar botões temporários
+  const SHOW_TEMP_BUTTONS = false
+  
+  const { outputs: supabaseOutputs, addOutput, updateOutput, deleteOutput, isLoading, refreshOutputs } = useOutputs()
   const { materials: supabaseMaterials } = useMaterials()
   const { institutions: supabaseInstitutions } = useInstitutions()
   const { toast } = useToast()
@@ -167,6 +171,36 @@ export default function OutputsPage() {
     }
   }
 
+  const handleDeleteAllOutputs = async () => {
+    const confirmed = await confirmDialog.confirm({
+      title: 'Excluir Todas as Saídas',
+      description: `Tem certeza que deseja excluir TODAS as ${outputs.length} saídas? Esta ação não pode ser desfeita e afetará o estoque dos materiais.`,
+      confirmText: 'Excluir Todas',
+      cancelText: 'Cancelar',
+      variant: 'destructive',
+    })
+
+    if (confirmed) {
+      try {
+        // Excluir todas as saídas uma por uma para atualizar o estoque corretamente
+        for (const output of outputs) {
+          await deleteOutput(output.id)
+        }
+        
+        toast({
+          title: 'Sucesso',
+          description: 'Todas as saídas foram excluídas com sucesso.',
+        })
+      } catch (error) {
+        toast({
+          title: 'Erro',
+          description: 'Não foi possível excluir todas as saídas.',
+          variant: 'destructive',
+        })
+      }
+    }
+  }
+
   return (
     <AuthLayout>
       <div className="p-6 lg:p-8">
@@ -177,6 +211,17 @@ export default function OutputsPage() {
           >
             Nova Saída
           </Button>
+          {SHOW_TEMP_BUTTONS && (
+            <Button 
+              onClick={handleDeleteAllOutputs} 
+              variant="destructive"
+              className="font-medium"
+              title="TEMPORÁRIO - Excluir todas as saídas"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              TEMPORÁRIO: Excluir Todas
+            </Button>
+          )}
         </div>
 
         {isLoading ? (

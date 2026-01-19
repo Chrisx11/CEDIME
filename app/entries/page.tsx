@@ -12,6 +12,7 @@ import { EntryForm } from '@/components/entries/entry-form'
 import { useToast } from '@/hooks/use-toast'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { Trash2 } from 'lucide-react'
 
 // Função para converter Entry do Supabase para o formato esperado pelos componentes
 function convertEntry(entry: EntryType): Entry {
@@ -38,8 +39,11 @@ function convertEntry(entry: EntryType): Entry {
 }
 
 export default function EntriesPage() {
-  const { entries: supabaseEntries, addEntry, updateEntry, deleteEntry, isLoading } = useEntries()
-  const { materials: supabaseMaterials } = useMaterials()
+  // Flag para mostrar/ocultar botões temporários
+  const SHOW_TEMP_BUTTONS = false
+  
+  const { entries: supabaseEntries, addEntry, updateEntry, deleteEntry, isLoading, refreshEntries } = useEntries()
+  const { materials: supabaseMaterials, refreshMaterials } = useMaterials()
   const { suppliers: supabaseSuppliers } = useSuppliers()
   const { toast } = useToast()
   const confirmDialog = useConfirmDialog()
@@ -161,6 +165,36 @@ export default function EntriesPage() {
     }
   }
 
+  const handleDeleteAllEntries = async () => {
+    const confirmed = await confirmDialog.confirm({
+      title: 'Excluir Todas as Entradas',
+      description: `Tem certeza que deseja excluir TODAS as ${entries.length} entradas? Esta ação não pode ser desfeita e afetará o estoque dos materiais.`,
+      confirmText: 'Excluir Todas',
+      cancelText: 'Cancelar',
+      variant: 'destructive',
+    })
+
+    if (confirmed) {
+      try {
+        // Excluir todas as entradas uma por uma para atualizar o estoque corretamente
+        for (const entry of entries) {
+          await deleteEntry(entry.id)
+        }
+        
+        toast({
+          title: 'Sucesso',
+          description: 'Todas as entradas foram excluídas com sucesso.',
+        })
+      } catch (error) {
+        toast({
+          title: 'Erro',
+          description: 'Não foi possível excluir todas as entradas.',
+          variant: 'destructive',
+        })
+      }
+    }
+  }
+
 
   if (isLoading) {
     return (
@@ -184,6 +218,17 @@ export default function EntriesPage() {
           >
             Nova Entrada
           </Button>
+          {SHOW_TEMP_BUTTONS && (
+            <Button 
+              onClick={handleDeleteAllEntries} 
+              variant="destructive"
+              className="font-medium"
+              title="TEMPORÁRIO - Excluir todas as entradas"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              TEMPORÁRIO: Excluir Todas
+            </Button>
+          )}
         </div>
 
         <EntryTable
@@ -210,6 +255,7 @@ export default function EntriesPage() {
         onConfirm={confirmDialog.handleConfirm}
         onCancel={confirmDialog.handleCancel}
       />
+
     </AuthLayout>
   )
 }

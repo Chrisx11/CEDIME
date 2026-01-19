@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { Supplier, Institution, Material, Request } from './data-context'
+import { Supplier, Institution, Material, Request, Entry } from './data-context'
 import { maskCNPJ, maskPhone } from './utils'
 
 export function exportSuppliersToExcel(suppliers: Supplier[]) {
@@ -159,22 +159,54 @@ export function exportInstitutionsToPDF(institutions: Institution[]) {
 }
 
 export function exportMaterialsToExcel(materials: Material[]) {
-  const getCategoryLabel = (category: string) => {
-    // Retorna o próprio nome da categoria (todas são customizadas)
-    return category
+  if (!materials || materials.length === 0) {
+    console.warn('Nenhum material para exportar')
+    return
   }
 
-  const data = materials.map(material => ({
-    'Nome': material.name,
-    'Categoria': getCategoryLabel(material.category),
-    'Estoque': material.quantity,
-    'Unidade': material.unit,
-    'Estoque Mínimo': material.minQuantity,
-    'Valor Unitário': material.unitPrice.toFixed(2),
-    'Valor Total': (material.quantity * material.unitPrice).toFixed(2),
-    'Status': material.quantity <= material.minQuantity ? 'Estoque Baixo' : 'Normal',
-    'Última Atualização': new Date(material.lastUpdate).toLocaleDateString('pt-BR')
-  }))
+  const getCategoryLabel = (category: string) => {
+    // Retorna o próprio nome da categoria (todas são customizadas)
+    return category || ''
+  }
+
+  const data = materials
+    .filter(material => material && material.id) // Filtrar materiais inválidos
+    .map(material => {
+      const quantity = typeof material.quantity === 'number' ? material.quantity : Number(material.quantity) || 0
+      const minQuantity = typeof material.minQuantity === 'number' ? material.minQuantity : Number(material.minQuantity) || 0
+      const unitPrice = typeof material.unitPrice === 'number' ? material.unitPrice : Number(material.unitPrice) || 0
+      const totalValue = quantity * unitPrice
+      
+      // Tratar data de última atualização
+      let lastUpdate = ''
+      try {
+        if (material.lastUpdate) {
+          const date = new Date(material.lastUpdate)
+          if (!isNaN(date.getTime())) {
+            lastUpdate = date.toLocaleDateString('pt-BR')
+          }
+        }
+      } catch (e) {
+        lastUpdate = ''
+      }
+
+      return {
+        'Nome': String(material.name || ''),
+        'Categoria': getCategoryLabel(material.category),
+        'Estoque': quantity,
+        'Unidade': String(material.unit || ''),
+        'Estoque Mínimo': minQuantity,
+        'Valor Unitário': unitPrice.toFixed(2),
+        'Valor Total': totalValue.toFixed(2),
+        'Status': quantity <= minQuantity ? 'Estoque Baixo' : 'Normal',
+        'Última Atualização': lastUpdate
+      }
+    })
+
+  if (data.length === 0) {
+    console.warn('Nenhum dado válido para exportar após filtragem')
+    return
+  }
 
   const worksheet = XLSX.utils.json_to_sheet(data)
   const workbook = XLSX.utils.book_new()
@@ -247,6 +279,40 @@ export function exportMaterialsToPDF(materials: Material[]) {
   }
 
   doc.save(`materiais_${new Date().toISOString().split('T')[0]}.pdf`)
+}
+
+export function exportEntriesToExcel(entries: Entry[]) {
+  const data = entries.map(entry => ({
+    'Material': entry.materialName,
+    'Quantidade': entry.quantity,
+    'Unidade': entry.unit,
+    'Preço Unitário': entry.unitPrice.toFixed(2),
+    'Valor Total': (entry.quantity * entry.unitPrice).toFixed(2),
+    'Fornecedor': entry.supplierName || '',
+    'Responsável': entry.responsible,
+    'Data de Entrada': entry.entryDate,
+    'Data de Criação': new Date(entry.createdAt).toLocaleDateString('pt-BR')
+  }))
+
+  const worksheet = XLSX.utils.json_to_sheet(data)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Entradas')
+
+  // Ajustar largura das colunas
+  const colWidths = [
+    { wch: 30 }, // Material
+    { wch: 12 }, // Quantidade
+    { wch: 12 }, // Unidade
+    { wch: 15 }, // Preço Unitário
+    { wch: 15 }, // Valor Total
+    { wch: 25 }, // Fornecedor
+    { wch: 20 }, // Responsável
+    { wch: 15 }, // Data de Entrada
+    { wch: 15 }  // Data de Criação
+  ]
+  worksheet['!cols'] = colWidths
+
+  XLSX.writeFile(workbook, `entradas_${new Date().toISOString().split('T')[0]}.xlsx`)
 }
 
 export async function generateRequestReceipt(request: Request, institutionName: string) {

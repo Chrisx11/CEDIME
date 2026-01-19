@@ -11,21 +11,21 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, XCircle } from 'lucide-react'
-import { importMaterialsFromExcel, ImportResult } from '@/lib/import-utils'
+import { importEntriesFromExcel, ImportResult } from '@/lib/import-utils'
 import { useToast } from '@/hooks/use-toast'
 import { Progress } from '@/components/ui/progress'
 
-interface ImportMaterialsDialogProps {
+interface ImportEntriesDialogProps {
   isOpen: boolean
   onClose: () => void
   onImportComplete?: () => void
 }
 
-export function ImportMaterialsDialog({
+export function ImportEntriesDialog({
   isOpen,
   onClose,
   onImportComplete,
-}: ImportMaterialsDialogProps) {
+}: ImportEntriesDialogProps) {
   const [isImporting, setIsImporting] = useState(false)
   const [progress, setProgress] = useState(0)
   const [progressMessage, setProgressMessage] = useState('')
@@ -53,7 +53,7 @@ export function ImportMaterialsDialog({
     setResult(null)
 
     try {
-      const importResult = await importMaterialsFromExcel(
+      const importResult = await importEntriesFromExcel(
         file,
         (progressValue, message) => {
           setProgress(progressValue)
@@ -61,41 +61,64 @@ export function ImportMaterialsDialog({
         }
       )
 
+      console.log('📦 Resultado da importação recebido:', importResult)
       setResult(importResult)
 
-      // Sempre chamar onImportComplete se houver pelo menos um material atualizado
+      // Sempre chamar refresh se houver pelo menos uma entrada criada
       if (importResult.success > 0) {
-        // Aguardar um pouco para garantir que as entradas foram criadas
-        setTimeout(() => {
-          onImportComplete?.()
-          // Disparar evento para atualizar entradas em outras páginas
-          window.dispatchEvent(new CustomEvent('entriesUpdated'))
+        console.log('✅ Chamando onImportComplete com', importResult.success, 'entradas criadas')
+        // Aguardar um pouco para garantir que o banco processou
+        setTimeout(async () => {
+          console.log('🔄 Executando onImportComplete agora')
+          try {
+            if (onImportComplete) {
+              await onImportComplete()
+              console.log('✅ onImportComplete executado com sucesso')
+            } else {
+              console.error('❌ onImportComplete não está definido!')
+            }
+          } catch (error) {
+            console.error('❌ Erro ao executar onImportComplete:', error)
+          }
         }, 1500)
+      } else {
+        console.log('⚠️ Nenhuma entrada criada (success = 0)')
       }
 
-      if (importResult.errors === 0 && importResult.notFound.length === 0) {
-        toast({
-          title: 'Importação concluída!',
-          description: `${importResult.success} materiais atualizados e entradas criadas automaticamente.`,
-        })
-      } else if (importResult.success > 0) {
-        toast({
-          title: 'Importação concluída com avisos',
-          description: `${importResult.success} atualizados, ${importResult.errors} erros, ${importResult.notFound.length} não encontrados. Entradas criadas automaticamente.`,
-          variant: importResult.errors > 0 ? 'destructive' : 'default',
-        })
+      // Sempre mostrar toast com o resultado
+      if (importResult.success > 0) {
+        if (importResult.errors === 0 && importResult.notFound.length === 0) {
+          toast({
+            title: '✅ Importação concluída!',
+            description: `${importResult.success} entradas criadas com sucesso.`,
+          })
+        } else {
+          toast({
+            title: '⚠️ Importação concluída com avisos',
+            description: `${importResult.success} criadas, ${importResult.errors} erros, ${importResult.notFound.length} materiais não encontrados.`,
+            variant: importResult.errors > 0 ? 'destructive' : 'default',
+          })
+        }
       } else {
         toast({
-          title: 'Nenhum material atualizado',
-          description: `${importResult.errors} erros, ${importResult.notFound.length} não encontrados.`,
+          title: '❌ Nenhuma entrada criada',
+          description: `${importResult.errors} erros, ${importResult.notFound.length} materiais não encontrados.`,
           variant: 'destructive',
         })
       }
     } catch (error) {
+      console.error('Erro na importação:', error)
       toast({
         title: 'Erro na importação',
         description: error instanceof Error ? error.message : 'Erro desconhecido',
         variant: 'destructive',
+      })
+      setResult({
+        success: 0,
+        errors: 1,
+        notFound: [],
+        createdUnits: [],
+        errorsList: [{ material: 'Erro geral', error: error instanceof Error ? error.message : 'Erro desconhecido' }]
       })
     } finally {
       setIsImporting(false)
@@ -123,9 +146,9 @@ export function ImportMaterialsDialog({
               <Upload className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <DialogTitle className="text-xl">Importar Estoque do Excel</DialogTitle>
+              <DialogTitle className="text-xl">Importar Entradas do Excel</DialogTitle>
               <DialogDescription className="mt-1">
-                Importe o estoque atual e preços dos materiais a partir de um arquivo Excel
+                Importe entradas a partir de um arquivo Excel. As entradas serão criadas automaticamente.
               </DialogDescription>
             </div>
           </div>
@@ -156,6 +179,9 @@ export function ImportMaterialsDialog({
                   {isImporting ? 'Importando...' : 'Selecionar Arquivo'}
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Colunas esperadas: Material, Quantidade, Preço Unitário, Fornecedor (opcional), Responsável, Data de Entrada
+              </p>
             </div>
           )}
 
@@ -177,7 +203,7 @@ export function ImportMaterialsDialog({
                   <div className="text-2xl font-bold text-green-600 dark:text-green-400">
                     {result.success}
                   </div>
-                  <div className="text-sm text-muted-foreground">Atualizados</div>
+                  <div className="text-sm text-muted-foreground">Criadas</div>
                 </div>
                 <div className="flex flex-col items-center p-4 bg-red-50 dark:bg-red-950 rounded-lg">
                   <XCircle className="h-8 w-8 text-red-600 dark:text-red-400 mb-2" />
@@ -194,22 +220,6 @@ export function ImportMaterialsDialog({
                   <div className="text-sm text-muted-foreground">Não Encontrados</div>
                 </div>
               </div>
-
-              {result.createdUnits.length > 0 && (
-                <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
-                  <div className="text-sm font-medium mb-2">Unidades criadas:</div>
-                  <div className="flex flex-wrap gap-2">
-                    {result.createdUnits.map((unit) => (
-                      <span
-                        key={unit}
-                        className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded text-xs"
-                      >
-                        {unit}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {result.notFound.length > 0 && (
                 <div className="p-4 bg-yellow-50 dark:bg-yellow-950 rounded-lg">

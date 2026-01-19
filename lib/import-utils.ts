@@ -213,11 +213,22 @@ export async function importMaterialsFromExcel(
           ? Number(row[' Valor Unitário '])
           : 0
 
+        // Buscar estoque atual do material para calcular a diferença
+        const { data: currentMaterial } = await supabase
+          .from('materials')
+          .select('quantity, unit_price')
+          .eq('id', material.id)
+          .single()
+
+        const currentQuantity = currentMaterial?.quantity || 0
+        const newQuantity = Math.max(0, quantity)
+        const quantityDifference = newQuantity - currentQuantity
+
         // Atualizar o material
         const { error: updateError } = await supabase
           .from('materials')
           .update({
-            quantity: Math.max(0, quantity),
+            quantity: newQuantity,
             min_quantity: Math.max(0, minQuantity),
             unit_price: Math.max(0, unitPrice),
             unit: normalizedUnit,
@@ -233,6 +244,43 @@ export async function importMaterialsFromExcel(
           })
         } else {
           result.success++
+          
+          // Se o estoque final for maior que 0, criar entrada automaticamente
+          // Se a quantidade aumentou, usar a diferença. Se não, usar a quantidade total
+          if (newQuantity > 0) {
+            try {
+              const entryQuantity = quantityDifference > 0 ? quantityDifference : newQuantity
+              const entryPrice = unitPrice > 0 ? unitPrice : (currentMaterial?.unit_price || 0)
+              const entryDate = new Date().toISOString().split('T')[0]
+              
+              const { error: entryError } = await supabase
+                .from('entries')
+                .insert([{
+                  material_id: material.id,
+                  material_name: material.name,
+                  quantity: entryQuantity,
+                  unit: normalizedUnit,
+                  unit_price: entryPrice,
+                  supplier_id: null,
+                  supplier_name: null,
+                  reason: 'Importação de estoque',
+                  responsible: 'Sistema',
+                  entry_date: entryDate
+                }])
+
+              if (entryError) {
+                console.error('Erro ao criar entrada automaticamente:', entryError)
+                // Não contar como erro principal, apenas logar
+              } else {
+                console.log(`✅ Entrada criada automaticamente para ${materialName}: ${entryQuantity} ${normalizedUnit}`)
+                // Disparar evento para atualizar a página de entradas
+                window.dispatchEvent(new CustomEvent('entriesUpdated'))
+              }
+            } catch (entryError) {
+              console.error('Erro ao criar entrada:', entryError)
+              // Não contar como erro principal
+            }
+          }
         }
 
         processedRows++
@@ -249,6 +297,297 @@ export async function importMaterialsFromExcel(
     }
 
     onProgress?.(100, 'Importação concluída!')
+    return result
+
+  } catch (error) {
+    throw new Error(
+      error instanceof Error ? error.message : 'Erro desconhecido ao importar'
+    )
+  }
+}
+
+interface ExcelEntryRow {
+  Material: string
+  Quantidade: number | string
+  Unidade?: string
+  'Preço Unitário': number | string
+  'Valor Total'?: number | string
+  Fornecedor?: string
+  Responsável: string
+  'Data de Entrada': string
+}
+
+/**
+ * Lê um arquivo Excel de entradas e retorna os dados
+ */
+export function readEntriesExcelFile(file: File): Promise<ExcelEntryRow[]> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result
+        if (!data) {
+          reject(new Error('Não foi possível ler o arquivo'))
+          return
+        }
+        
+        const workbook = XLSX.read(data, { type: 'binary' })
+        const sheetName = workbook.SheetNames[0]
+        const worksheet = workbook.Sheets[sheetName]
+        const jsonData = XLSX.utils.sheet_to_json<ExcelEntryRow>(worksheet, { defval: null })
+        
+        resolve(jsonData)
+      } catch (error) {
+        reject(error)
+      }
+    }
+    
+    reader.onerror = () => {
+      reject(new Error('Erro ao ler o arquivo'))
+    }
+    
+    reader.readAsBinaryString(file)
+  })
+}
+
+/**
+ * Importa entradas do Excel, criando entradas automaticamente
+ */
+export async function importEntriesFromExcel(
+  file: File,
+  onProgress?: (progress: number, message: string) => void
+): Promise<ImportResult> {
+  const supabase = createClient()
+  const result: ImportResult = {
+    success: 0,
+    errors: 0,
+    notFound: [],
+    createdUnits: [],
+    errorsList: []
+  }
+
+  try {
+    // Ler o arquivo Excel
+    onProgress?.(0, 'Lendo arquivo Excel...')
+    const excelData = await readEntriesExcelFile(file)
+    
+    if (excelData.length === 0) {
+      throw new Error('O arquivo Excel está vazio')
+    }
+
+    // Processar cada linha do Excel
+    const totalRows = excelData.length
+    let processedRows = 0
+
+    for (const row of excelData) {
+      try {
+        const materialName = row.Material?.trim()
+        if (!materialName) {
+          result.errors++
+          result.errorsList.push({
+            material: 'Material não informado',
+            error: 'Linha sem nome de material'
+          })
+          continue
+        }
+
+        // Normalizar o nome do material (remover espaços extras, normalizar)
+        const normalizedName = materialName.replace(/\s+/g, ' ').trim().toLowerCase()
+        
+        // Função para normalizar strings para comparação (remove acentos, espaços extras, etc)
+        const normalizeForComparison = (str: string) => {
+          return str
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+            .replace(/\s+/g, ' ') // Normaliza espaços
+            .trim()
+        }
+
+        // Buscar o material pelo nome - tentar múltiplas estratégias
+        let materials: any[] | null = null
+        let materialError: any = null
+
+        // Estratégia 1: Busca exata com ilike
+        let { data: exactMatch, error: exactError } = await supabase
+          .from('materials')
+          .select('id, name, unit, unit_price')
+          .ilike('name', materialName.trim())
+          .limit(1)
+
+        if (exactMatch && exactMatch.length > 0) {
+          materials = exactMatch
+        } else {
+          // Estratégia 2: Busca com LIKE usando % no início e fim
+          const { data: likeMatch, error: likeError } = await supabase
+            .from('materials')
+            .select('id, name, unit, unit_price')
+            .ilike('name', `%${materialName.trim()}%`)
+            .limit(10)
+
+          if (likeMatch && likeMatch.length > 0) {
+            // Encontrar o match mais próximo usando comparação normalizada
+            const normalizedSearch = normalizeForComparison(materialName)
+            const bestMatch = likeMatch.find(m => {
+              const normalizedMaterial = normalizeForComparison(m.name)
+              return normalizedMaterial === normalizedSearch ||
+                     normalizedMaterial.startsWith(normalizedSearch) ||
+                     normalizedSearch.startsWith(normalizedMaterial)
+            }) || likeMatch.find(m => {
+              // Busca parcial mais flexível
+              const normalizedMaterial = normalizeForComparison(m.name)
+              return normalizedMaterial.includes(normalizedSearch) ||
+                     normalizedSearch.includes(normalizedMaterial)
+            }) || likeMatch[0]
+            
+            materials = [bestMatch]
+          } else {
+            materialError = likeError || exactError
+          }
+        }
+
+        if (materialError) {
+          result.errors++
+          result.errorsList.push({
+            material: materialName,
+            error: `Erro ao buscar material: ${materialError.message}`
+          })
+          continue
+        }
+
+        if (!materials || materials.length === 0) {
+          result.notFound.push(materialName)
+          continue
+        }
+
+        const material = materials[0]
+        
+        // Log para debug (pode remover depois)
+        if (material.name.toLowerCase().trim() !== normalizedName.toLowerCase()) {
+          console.log(`Material encontrado com nome diferente: "${material.name}" (buscado: "${materialName}")`)
+        }
+
+        // Obter quantidade
+        const quantity = row.Quantidade !== null && row.Quantidade !== undefined
+          ? Number(row.Quantidade)
+          : 0
+
+        // Ignorar produtos com quantidade zero ou negativa (não gerar entrada)
+        if (quantity <= 0) {
+          // Não contar como erro, apenas pular esta linha
+          console.log(`⏭️ Ignorando ${materialName} - quantidade zero (${quantity})`)
+          processedRows++
+          const progress = Math.floor((processedRows / totalRows) * 100)
+          onProgress?.(progress, `Processando ${processedRows}/${totalRows} entradas... (ignorando ${materialName} - quantidade zero)`)
+          continue
+        }
+
+        // Obter preço unitário - usar o valor do Excel ou o preço médio do material
+        let unitPrice = 0
+        if (row['Preço Unitário'] !== null && row['Preço Unitário'] !== undefined && row['Preço Unitário'] !== '') {
+          const priceValue = Number(row['Preço Unitário'])
+          if (!isNaN(priceValue) && priceValue > 0) {
+            unitPrice = priceValue
+          } else if (material.unit_price && material.unit_price > 0) {
+            // Usar preço médio do material se o valor do Excel for inválido
+            unitPrice = material.unit_price
+          }
+        } else if (material.unit_price && material.unit_price > 0) {
+          // Usar preço médio do material se não fornecido
+          unitPrice = material.unit_price
+        }
+        // Se ainda for 0, permite criar a entrada com preço 0 (será atualizado pelo sistema)
+
+        // Buscar fornecedor se informado
+        let supplierId: string | undefined = undefined
+        let supplierName: string | undefined = undefined
+        
+        if (row.Fornecedor && row.Fornecedor.trim()) {
+          const { data: suppliers } = await supabase
+            .from('suppliers')
+            .select('id, name')
+            .ilike('name', row.Fornecedor.trim())
+            .limit(1)
+          
+          if (suppliers && suppliers.length > 0) {
+            supplierId = suppliers[0].id
+            supplierName = suppliers[0].name
+          }
+        }
+
+        // Obter responsável
+        const responsible = row.Responsável?.trim() || 'Sistema'
+
+        // Obter data de entrada
+        let entryDate = row['Data de Entrada']
+        if (!entryDate) {
+          entryDate = new Date().toISOString().split('T')[0]
+        } else {
+          // Tentar converter a data para formato YYYY-MM-DD
+          try {
+            const date = new Date(entryDate)
+            if (isNaN(date.getTime())) {
+              entryDate = new Date().toISOString().split('T')[0]
+            } else {
+              entryDate = date.toISOString().split('T')[0]
+            }
+          } catch {
+            entryDate = new Date().toISOString().split('T')[0]
+          }
+        }
+
+        // Criar a entrada
+        const entryData = {
+          material_id: material.id,
+          material_name: material.name,
+          quantity: quantity,
+          unit: material.unit,
+          unit_price: unitPrice,
+          supplier_id: supplierId || null,
+          supplier_name: supplierName || null,
+          reason: '',
+          responsible: responsible,
+          entry_date: entryDate
+        }
+
+        const { data: insertedEntry, error: insertError } = await supabase
+          .from('entries')
+          .insert([entryData])
+          .select()
+
+        if (insertError) {
+          console.error('Erro ao criar entrada:', insertError, entryData)
+          result.errors++
+          result.errorsList.push({
+            material: materialName,
+            error: `Erro ao criar entrada: ${insertError.message}`
+          })
+        } else {
+          console.log('✅ Entrada criada com sucesso:', insertedEntry)
+          console.log('Material:', materialName, 'Quantidade:', quantity)
+          result.success++
+        }
+
+        processedRows++
+        const progress = Math.floor((processedRows / totalRows) * 100)
+        onProgress?.(progress, `Processando ${processedRows}/${totalRows} entradas...`)
+
+      } catch (error) {
+        result.errors++
+        result.errorsList.push({
+          material: row.Material || 'Desconhecido',
+          error: error instanceof Error ? error.message : 'Erro desconhecido'
+        })
+      }
+    }
+
+    onProgress?.(100, 'Importação concluída!')
+    console.log('📊 Resultado final da importação de entradas:', {
+      success: result.success,
+      errors: result.errors,
+      notFound: result.notFound.length
+    })
     return result
 
   } catch (error) {

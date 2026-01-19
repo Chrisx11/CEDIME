@@ -42,6 +42,7 @@ export function useEntries() {
         return
       }
 
+      console.log(`Entradas carregadas: ${data?.length || 0} registros`)
       setEntries(data || [])
     } catch (error) {
       console.error('Erro ao buscar entradas:', error)
@@ -57,6 +58,20 @@ export function useEntries() {
 
   useEffect(() => {
     fetchEntries()
+    
+    // Escutar evento de atualização de entradas
+    const handleEntriesUpdate = () => {
+      console.log('Evento entriesUpdated recebido, recarregando entradas...')
+      setTimeout(() => {
+        fetchEntries()
+      }, 500)
+    }
+    
+    window.addEventListener('entriesUpdated', handleEntriesUpdate)
+    
+    return () => {
+      window.removeEventListener('entriesUpdated', handleEntriesUpdate)
+    }
   }, [fetchEntries])
 
   // Função para atualizar estoque e preço médio do material
