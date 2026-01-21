@@ -32,12 +32,15 @@ interface ExcelMaterialRow {
   Nome: string
   Categoria: string
   Estoque: number | null
-  unidade: string
+  unidade?: string
+  Unidade?: string
   'Estoque Mínimo': number
-  ' Valor Unitário ': number
-  ' Valor Total ': number
-  Status: string
-  'Última Atualização': string
+  'Valor Unitário'?: number
+  ' Valor Unitário '?: number
+  'Valor Total'?: number
+  ' Valor Total '?: number
+  Status?: string
+  'Última Atualização'?: string
 }
 
 export interface ImportResult {
@@ -145,6 +148,11 @@ export async function importMaterialsFromExcel(
 
     for (const row of excelData) {
       try {
+        // Debug: logar as chaves disponíveis na primeira linha para verificar nomes das colunas
+        if (processedRows === 0) {
+          console.log('🔍 Chaves disponíveis na primeira linha do Excel:', Object.keys(row))
+        }
+        
         const materialName = row.Nome?.trim()
         if (!materialName) {
           result.errors++
@@ -179,7 +187,8 @@ export async function importMaterialsFromExcel(
         const material = materials[0]
 
         // Normalizar e verificar/criar unidade
-        const normalizedUnit = normalizeUnit(row.unidade || 'unidade')
+        const unitFromRow = row.unidade || row.Unidade || 'unidade'
+        const normalizedUnit = normalizeUnit(unitFromRow)
         
         if (!existingUnitsSet.has(normalizedUnit)) {
           // Criar a unidade
@@ -209,9 +218,40 @@ export async function importMaterialsFromExcel(
           ? Number(row['Estoque Mínimo'])
           : 0
         
-        const unitPrice = row[' Valor Unitário '] !== null && row[' Valor Unitário '] !== undefined
-          ? Number(row[' Valor Unitário '])
-          : 0
+        // Tentar ler o valor unitário de diferentes variações do nome da coluna
+        // O Excel pode retornar com ou sem espaços nas extremidades
+        let unitPrice: number | null = null
+        
+        // Tentar diferentes variações do nome da coluna
+        const priceValue = row['Valor Unitário'] ?? row[' Valor Unitário '] ?? null
+        
+        if (priceValue !== null && priceValue !== undefined) {
+          const parsedPrice = Number(priceValue)
+          if (!isNaN(parsedPrice)) {
+            unitPrice = parsedPrice
+            console.log(`💰 Valor unitário lido do Excel para ${materialName}: ${unitPrice}`)
+          }
+        }
+        
+        // Se o valor unitário não foi encontrado no Excel, buscar o valor atual do material
+        if (unitPrice === null) {
+          const { data: currentMaterialForPrice } = await supabase
+            .from('materials')
+            .select('unit_price')
+            .eq('id', material.id)
+            .single()
+          
+          if (currentMaterialForPrice?.unit_price !== null && currentMaterialForPrice?.unit_price !== undefined) {
+            unitPrice = currentMaterialForPrice.unit_price
+            console.log(`💰 Usando valor unitário atual do material ${materialName}: ${unitPrice}`)
+          } else {
+            unitPrice = 0
+            console.warn(`⚠️ Valor unitário não encontrado para ${materialName}, usando 0`)
+          }
+        }
+        
+        // Garantir que unitPrice seja um número válido (não negativo)
+        const finalUnitPrice = Math.max(0, unitPrice || 0)
 
         // Buscar estoque atual do material para calcular a diferença
         const { data: currentMaterial } = await supabase
@@ -230,7 +270,7 @@ export async function importMaterialsFromExcel(
           .update({
             quantity: newQuantity,
             min_quantity: Math.max(0, minQuantity),
-            unit_price: Math.max(0, unitPrice),
+            unit_price: finalUnitPrice,
             unit: normalizedUnit,
             last_update: new Date().toISOString()
           })
@@ -250,8 +290,11 @@ export async function importMaterialsFromExcel(
           if (newQuantity > 0) {
             try {
               const entryQuantity = quantityDifference > 0 ? quantityDifference : newQuantity
-              const entryPrice = unitPrice > 0 ? unitPrice : (currentMaterial?.unit_price || 0)
+              // Usar o valor unitário importado (finalUnitPrice), ou o valor atual do material se não houver
+              const entryPrice = finalUnitPrice > 0 ? finalUnitPrice : (currentMaterial?.unit_price || 0)
               const entryDate = new Date().toISOString().split('T')[0]
+              
+              console.log(`📦 Criando entrada para ${materialName}: quantidade=${entryQuantity}, preço=${entryPrice}`)
               
               const { error: entryError } = await supabase
                 .from('entries')
