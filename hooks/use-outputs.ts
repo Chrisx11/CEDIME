@@ -19,17 +19,66 @@ export interface Output {
 export function useOutputs() {
   const [outputs, setOutputs] = useState<Output[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [totalCount, setTotalCount] = useState(0)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+  const [fetchAll, setFetchAll] = useState(false)
   const supabase = createClient()
   const { toast } = useToast()
 
   const fetchOutputs = useCallback(async () => {
     try {
       setIsLoading(true)
-      const { data, error } = await supabase
+      // Quando fetchAll=true (modo filtro), precisamos evitar o limite padrão (~1000).
+      // Então buscamos em páginas de 1000 e concatenamos.
+      if (fetchAll) {
+        const chunkSize = 1000
+        let from = 0
+        let all: Output[] = []
+        let total: number | null = null
+
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const to = from + chunkSize - 1
+          const { data, error, count } = await supabase
+            .from('outputs')
+            .select('*', { count: 'exact' })
+            .order('output_date', { ascending: false })
+            .order('created_at', { ascending: false })
+            .range(from, to)
+
+          if (error) {
+            console.error('Erro ao buscar saídas:', error)
+            toast({
+              title: 'Erro',
+              description: 'Não foi possível carregar as saídas.',
+              variant: 'destructive',
+            })
+            return
+          }
+
+          if (typeof count === 'number') total = count
+          const chunk = (data || []) as Output[]
+          all = all.concat(chunk)
+
+          if (chunk.length < chunkSize) break
+          from += chunkSize
+        }
+
+        setOutputs(all)
+        setTotalCount(typeof total === 'number' ? total : all.length)
+        return
+      }
+
+      const from = (page - 1) * pageSize
+      const to = from + pageSize - 1
+
+      const { data, error, count } = await supabase
         .from('outputs')
-        .select('*')
+        .select('*', { count: 'exact' })
         .order('output_date', { ascending: false })
         .order('created_at', { ascending: false })
+        .range(from, to)
 
       if (error) {
         console.error('Erro ao buscar saídas:', error)
@@ -42,6 +91,7 @@ export function useOutputs() {
       }
 
       setOutputs(data || [])
+      setTotalCount(typeof count === 'number' ? count : 0)
     } catch (error) {
       console.error('Erro ao buscar saídas:', error)
       toast({
@@ -52,7 +102,7 @@ export function useOutputs() {
     } finally {
       setIsLoading(false)
     }
-  }, [supabase, toast])
+  }, [supabase, toast, page, pageSize, fetchAll])
 
   useEffect(() => {
     fetchOutputs()
@@ -78,13 +128,14 @@ export function useOutputs() {
         }
 
         if (data) {
-          setOutputs((prev) => [data, ...prev])
-          
+          // Em paginação, recarregar a página atual para refletir ordenação e total
+          await fetchOutputs()
+
           // Disparar evento para atualizar a UI (o trigger do banco já atualizou o estoque)
-          window.dispatchEvent(new CustomEvent('materialUpdated', { 
-            detail: { materialId: outputData.material_id } 
+          window.dispatchEvent(new CustomEvent('materialUpdated', {
+            detail: { materialId: outputData.material_id },
           }))
-          
+
           toast({
             title: 'Sucesso',
             description: 'Saída criada com sucesso.',
@@ -94,7 +145,7 @@ export function useOutputs() {
         throw error
       }
     },
-    [supabase, toast]
+    [supabase, toast, fetchOutputs]
   )
 
   const updateOutput = useCallback(
@@ -125,9 +176,8 @@ export function useOutputs() {
         }
 
         if (data) {
-          setOutputs((prev) =>
-            prev.map((output) => (output.id === id ? data : output))
-          )
+          // Em paginação, recarregar a página atual para refletir ordenação e dados
+          await fetchOutputs()
           
           // Disparar eventos para atualizar a UI (o trigger do banco já atualizou o estoque)
           const oldMaterialId = oldOutput?.material_id
@@ -152,7 +202,7 @@ export function useOutputs() {
         throw error
       }
     },
-    [supabase, toast]
+    [supabase, toast, fetchOutputs]
   )
 
   const deleteOutput = useCallback(
@@ -177,7 +227,8 @@ export function useOutputs() {
           throw error
         }
 
-        setOutputs((prev) => prev.filter((output) => output.id !== id))
+        // Em paginação, recarregar a página atual para refletir total e lista
+        await fetchOutputs()
         
         // Disparar evento para atualizar a UI (o trigger do banco já atualizou o estoque)
         if (outputToDelete?.material_id) {
@@ -194,12 +245,19 @@ export function useOutputs() {
         throw error
       }
     },
-    [supabase, toast]
+    [supabase, toast, fetchOutputs]
   )
 
   return {
     outputs,
     isLoading,
+    totalCount,
+    page,
+    pageSize,
+    setPage,
+    setPageSize,
+    fetchAll,
+    setFetchAll,
     addOutput,
     updateOutput,
     deleteOutput,

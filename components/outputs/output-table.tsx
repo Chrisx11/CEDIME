@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import { Output } from '@/lib/data-context'
 import { useMaterials } from '@/hooks/use-materials'
 
@@ -29,13 +29,22 @@ import { Button } from '@/components/ui/button'
 
 interface OutputTableProps {
   outputs: Output[]
+  totalCount?: number
+  searchQuery: string
+  onSearchQueryChange: (value: string) => void
   onEdit: (id: string) => void
   onDelete: (id: string) => void
 }
 
-export function OutputTable({ outputs, onEdit, onDelete }: OutputTableProps) {
+export function OutputTable({
+  outputs,
+  totalCount,
+  searchQuery,
+  onSearchQueryChange,
+  onEdit,
+  onDelete,
+}: OutputTableProps) {
   const { materials: supabaseMaterials } = useMaterials()
-  const [searchQuery, setSearchQuery] = useState('')
   
   // Converter materiais para o formato esperado
   const materials = useMemo(() => {
@@ -88,7 +97,7 @@ export function OutputTable({ outputs, onEdit, onDelete }: OutputTableProps) {
           placeholder="Pesquisar por material, instituição, responsável ou data..."
           value={searchQuery}
           onChange={(e) => {
-            setSearchQuery(e.target.value)
+            onSearchQueryChange(e.target.value)
           }}
           className="w-full pl-10 pr-4 py-2 border border-input rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
           autoComplete="off"
@@ -167,7 +176,7 @@ export function OutputTable({ outputs, onEdit, onDelete }: OutputTableProps) {
 
       {filteredOutputs.length > 0 && (
         <div className="text-sm text-muted-foreground">
-          Mostrando {filteredOutputs.length} de {outputs.length} saída(s)
+          Mostrando {filteredOutputs.length} de {totalCount ?? outputs.length} saída(s)
         </div>
       )}
     </div>

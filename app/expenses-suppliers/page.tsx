@@ -7,6 +7,13 @@ import { useEntries } from '@/hooks/use-entries'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Table,
   TableBody,
   TableCell,
@@ -29,7 +36,7 @@ import {
 } from '@/components/ui/select'
 import { FileText, Download, FileSpreadsheet, File, Search } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import { exportExpensesBySuppliersToExcel, exportExpensesBySuppliersToPDF } from '@/lib/export-utils'
+import { exportExpensesBySuppliersToExcel, exportExpensesBySuppliersToPDF, exportTableToPDF } from '@/lib/export-utils'
 
 const months = [
   'Jan',
@@ -53,8 +60,17 @@ export default function ExpensesSuppliersPage() {
   // Inicializar com o ano atual
   const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear())
   const { toast } = useToast()
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [detailsSupplierId, setDetailsSupplierId] = useState<string | null>(null)
+  const [detailsMonthIndex, setDetailsMonthIndex] = useState<number | null>(null)
 
   const isLoading = isLoadingSuppliers || isLoadingEntries
+
+  const openDetails = (supplierId: string, monthIndex: number | null) => {
+    setDetailsSupplierId(supplierId)
+    setDetailsMonthIndex(monthIndex)
+    setDetailsOpen(true)
+  }
 
   // Obter lista de anos disponíveis baseado nas entradas
   const availableYears = useMemo(() => {
@@ -115,12 +131,76 @@ export default function ExpensesSuppliersPage() {
     return expenses
   }, [entries, selectedYear])
 
+  type DetailRow = {
+    id: string
+    date: string
+    materialName: string
+    qty: number
+    unitPrice: number
+    total: number
+    responsible: string
+  }
+
+  const detailRows = useMemo<DetailRow[]>(() => {
+    if (!detailsSupplierId) return []
+
+    const monthFilter = detailsMonthIndex
+    const rows: DetailRow[] = []
+
+    const includeMonth = (d: Date) => {
+      if (monthFilter === null) return true
+      return d.getMonth() === monthFilter
+    }
+
+    entries.forEach((e) => {
+      if (!e.supplier_id) return
+      if (e.supplier_id !== detailsSupplierId) return
+
+      const d = new Date(e.entry_date)
+      if (d.getFullYear() !== selectedYear) return
+      if (!includeMonth(d)) return
+
+      const qty = Number(e.quantity) || 0
+      const unitPrice = Number(e.unit_price) || 0
+      rows.push({
+        id: e.id,
+        date: e.entry_date,
+        materialName: e.material_name,
+        qty,
+        unitPrice,
+        total: qty * unitPrice,
+        responsible: e.responsible,
+      })
+    })
+
+    rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    return rows
+  }, [detailsSupplierId, detailsMonthIndex, entries, selectedYear])
+
+  const detailsSupplierName = useMemo(() => {
+    if (!detailsSupplierId) return ''
+    return suppliers.find((s) => s.id === detailsSupplierId)?.name || ''
+  }, [detailsSupplierId, suppliers])
+
+  const detailsTitle = useMemo(() => {
+    if (!detailsSupplierId) return 'Detalhes'
+    const monthLabel = detailsMonthIndex === null ? 'Todos os meses' : months[detailsMonthIndex]
+    return `${detailsSupplierName} • ${monthLabel} • ${selectedYear}`
+  }, [detailsSupplierId, detailsMonthIndex, detailsSupplierName, selectedYear])
+
   // Função para formatar valor em reais
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL',
       minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value)
+  }
+
+  const formatQuantity = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 0,
       maximumFractionDigits: 2,
     }).format(value)
   }
@@ -276,11 +356,23 @@ export default function ExpensesSuppliersPage() {
                     {filteredSuppliers.map((supplier) => (
                       <TableRow key={supplier.id}>
                         <TableCell className="font-medium text-sm">
-                          {supplier.name}
+                          <button
+                            type="button"
+                            className="text-left hover:underline"
+                            onClick={() => openDetails(supplier.id, null)}
+                          >
+                            {supplier.name}
+                          </button>
                         </TableCell>
                         {months.map((month, index) => (
                           <TableCell key={month} className="text-center px-2 text-xs">
-                            {formatCurrency(getMonthValue(supplier.id, index))}
+                            <button
+                              type="button"
+                              className="hover:underline"
+                              onClick={() => openDetails(supplier.id, index)}
+                            >
+                              {formatCurrency(getMonthValue(supplier.id, index))}
+                            </button>
                           </TableCell>
                         ))}
                         <TableCell className="text-center font-semibold px-2 text-xs">
@@ -309,6 +401,77 @@ export default function ExpensesSuppliersPage() {
           </div>
         </Card>
       </div>
+
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent className="sm:max-w-4xl">
+          <DialogHeader>
+            <div className="flex items-center justify-between gap-2">
+              <DialogTitle>Registros</DialogTitle>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                title="Baixar PDF"
+                onClick={() => {
+                  exportTableToPDF({
+                    title: 'Registros de Despesas por Fornecedor - CEDIME',
+                    subtitle: detailsTitle,
+                    headers: ['Data', 'Material', 'Qtd', 'Preço Unit.', 'Total', 'Responsável'],
+                    rows: detailRows.map(r => [
+                      new Date(r.date).toLocaleDateString('pt-BR'),
+                      r.materialName,
+                      formatQuantity(r.qty),
+                      formatCurrency(r.unitPrice),
+                      formatCurrency(r.total),
+                      r.responsible,
+                    ]),
+                    filename: `registros_fornecedor_${detailsSupplierName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`,
+                    orientation: 'landscape',
+                  })
+                }}
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+            </div>
+            <DialogDescription>{detailsTitle}</DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-[65vh] overflow-auto border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Material</TableHead>
+                  <TableHead className="text-right">Qtd</TableHead>
+                  <TableHead className="text-right">Preço Unit.</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead>Responsável</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {detailRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                      Nenhum registro encontrado para este filtro.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  detailRows.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell>{new Date(r.date).toLocaleDateString('pt-BR')}</TableCell>
+                      <TableCell className="font-medium">{r.materialName}</TableCell>
+                      <TableCell className="text-right">{formatQuantity(r.qty)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(r.unitPrice)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(r.total)}</TableCell>
+                      <TableCell>{r.responsible}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AuthLayout>
   )
 }

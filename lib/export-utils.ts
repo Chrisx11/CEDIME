@@ -4,6 +4,67 @@ import autoTable from 'jspdf-autotable'
 import { Supplier, Institution, Material, Request, Entry } from './data-context'
 import { maskCNPJ, maskPhone } from './utils'
 
+type PdfTable = {
+  title: string
+  subtitle?: string
+  headers: string[]
+  rows: (string | number)[][]
+  filename: string
+  orientation?: 'portrait' | 'landscape'
+}
+
+export function exportTableToPDF({
+  title,
+  subtitle,
+  headers,
+  rows,
+  filename,
+  orientation = 'portrait',
+}: PdfTable) {
+  const doc = new jsPDF(orientation, 'mm', 'a4')
+
+  doc.setFontSize(16)
+  doc.text(title, 14, 15)
+
+  doc.setFontSize(10)
+  doc.text(
+    `Gerado em: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`,
+    14,
+    22,
+  )
+
+  let startY = 28
+  if (subtitle && subtitle.trim() !== '') {
+    doc.setFontSize(10)
+    doc.text(subtitle, 14, 27)
+    startY = 32
+  }
+
+  autoTable(doc, {
+    head: [headers],
+    body: rows,
+    startY,
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [249, 250, 251] },
+    margin: { left: 14, right: 14 },
+  })
+
+  const pageCount = doc.getNumberOfPages()
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i)
+    doc.setFontSize(8)
+    doc.text(
+      `Página ${i} de ${pageCount}`,
+      doc.internal.pageSize.getWidth() / 2,
+      doc.internal.pageSize.getHeight() - 10,
+      { align: 'center' },
+    )
+  }
+
+  doc.save(filename)
+}
+
 export function exportSuppliersToExcel(suppliers: Supplier[]) {
   const data = suppliers.map(supplier => ({
     'Nome': supplier.name,

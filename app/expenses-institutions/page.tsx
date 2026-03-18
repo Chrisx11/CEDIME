@@ -1,12 +1,19 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { AuthLayout } from '@/components/auth-layout'
 import { useInstitutions } from '@/hooks/use-institutions'
 import { useOutputs } from '@/hooks/use-outputs'
 import { useMaterials } from '@/hooks/use-materials'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   Table,
   TableBody,
@@ -30,7 +37,7 @@ import {
 } from '@/components/ui/select'
 import { FileText, Download, FileSpreadsheet, File, Search } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import { exportExpensesByInstitutionsToExcel, exportExpensesByInstitutionsToPDF } from '@/lib/export-utils'
+import { exportExpensesByInstitutionsToExcel, exportExpensesByInstitutionsToPDF, exportTableToPDF } from '@/lib/export-utils'
 
 const months = [
   'Jan',
@@ -49,15 +56,31 @@ const months = [
 
 export default function ExpensesInstitutionsPage() {
   const { institutions, isLoading: isLoadingInstitutions } = useInstitutions()
-  const { outputs, isLoading: isLoadingOutputs } = useOutputs()
+  const { outputs, isLoading: isLoadingOutputs, setFetchAll, setPage } = useOutputs()
   const { materials, isLoading: isLoadingMaterials } = useMaterials()
   const [searchQuery, setSearchQuery] = useState('')
   const currentYear = new Date().getFullYear()
   const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear())
   const [selectedInstitutionId, setSelectedInstitutionId] = useState<string>('all')
   const { toast } = useToast()
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [detailsInstitutionId, setDetailsInstitutionId] = useState<string | null>(null)
+  const [detailsMonthIndex, setDetailsMonthIndex] = useState<number | null>(null)
 
   const isLoading = isLoadingInstitutions || isLoadingOutputs || isLoadingMaterials
+
+  // Esta página precisa de TODAS as saídas para distribuir corretamente por mês/ano.
+  // Sem isso, a paginação das saídas (ordenadas por data) acaba trazendo majoritariamente o mês atual.
+  useEffect(() => {
+    setFetchAll(true)
+    setPage(1)
+  }, [setFetchAll, setPage])
+
+  const openDetails = (institutionId: string, monthIndex: number | null) => {
+    setDetailsInstitutionId(institutionId)
+    setDetailsMonthIndex(monthIndex)
+    setDetailsOpen(true)
+  }
 
   // Obter lista de anos disponíveis baseado nas saídas
   const availableYears = useMemo(() => {
@@ -130,12 +153,77 @@ export default function ExpensesInstitutionsPage() {
     return expenses
   }, [outputs, materials, selectedYear])
 
+  type DetailRow = {
+    id: string
+    date: string
+    materialName: string
+    qty: number
+    unitPrice: number
+    total: number
+    responsible: string
+  }
+
+  const detailRows = useMemo<DetailRow[]>(() => {
+    if (!detailsInstitutionId) return []
+
+    const monthFilter = detailsMonthIndex
+    const rows: DetailRow[] = []
+
+    const includeMonth = (d: Date) => {
+      if (monthFilter === null) return true
+      return d.getMonth() === monthFilter
+    }
+
+    outputs.forEach((o) => {
+      if (!o.institution_id) return
+      if (o.institution_id !== detailsInstitutionId) return
+
+      const d = new Date(o.output_date)
+      if (d.getFullYear() !== selectedYear) return
+      if (!includeMonth(d)) return
+
+      const material = materials.find((m) => m.id === o.material_id)
+      const unitPrice = material?.unit_price || 0
+      const qty = Number(o.quantity) || 0
+      rows.push({
+        id: o.id,
+        date: o.output_date,
+        materialName: o.material_name,
+        qty,
+        unitPrice,
+        total: qty * unitPrice,
+        responsible: o.responsible,
+      })
+    })
+
+    rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    return rows
+  }, [detailsInstitutionId, detailsMonthIndex, outputs, materials, selectedYear])
+
+  const detailsInstitutionName = useMemo(() => {
+    if (!detailsInstitutionId) return ''
+    return institutions.find((i) => i.id === detailsInstitutionId)?.name || ''
+  }, [detailsInstitutionId, institutions])
+
+  const detailsTitle = useMemo(() => {
+    if (!detailsInstitutionId) return 'Detalhes'
+    const monthLabel = detailsMonthIndex === null ? 'Todos os meses' : months[detailsMonthIndex]
+    return `${detailsInstitutionName} • ${monthLabel} • ${selectedYear}`
+  }, [detailsInstitutionId, detailsMonthIndex, detailsInstitutionName, selectedYear])
+
   // Função para formatar valor em reais
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL',
       minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value)
+  }
+
+  const formatQuantity = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 0,
       maximumFractionDigits: 2,
     }).format(value)
   }
@@ -325,11 +413,23 @@ export default function ExpensesInstitutionsPage() {
                     {filteredInstitutions.map((institution) => (
                       <TableRow key={institution.id}>
                         <TableCell className="font-medium text-sm">
-                          {institution.name}
+                          <button
+                            type="button"
+                            className="text-left hover:underline"
+                            onClick={() => openDetails(institution.id, null)}
+                          >
+                            {institution.name}
+                          </button>
                         </TableCell>
                         {months.map((month, index) => (
                           <TableCell key={month} className="text-center px-2 text-xs">
-                            {formatCurrency(getMonthValue(institution.id, index))}
+                            <button
+                              type="button"
+                              className="hover:underline"
+                              onClick={() => openDetails(institution.id, index)}
+                            >
+                              {formatCurrency(getMonthValue(institution.id, index))}
+                            </button>
                           </TableCell>
                         ))}
                         <TableCell className="text-center font-semibold px-2 text-xs">
@@ -358,6 +458,77 @@ export default function ExpensesInstitutionsPage() {
           </div>
         </Card>
       </div>
+
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent className="sm:max-w-4xl">
+          <DialogHeader>
+            <div className="flex items-center justify-between gap-2">
+              <DialogTitle>Registros</DialogTitle>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                title="Baixar PDF"
+                onClick={() => {
+                  exportTableToPDF({
+                    title: 'Registros de Despesas por Instituição - CEDIME',
+                    subtitle: detailsTitle,
+                    headers: ['Data', 'Material', 'Qtd', 'Preço Unit.', 'Total', 'Responsável'],
+                    rows: detailRows.map(r => [
+                      new Date(r.date).toLocaleDateString('pt-BR'),
+                      r.materialName,
+                      formatQuantity(r.qty),
+                      formatCurrency(r.unitPrice),
+                      formatCurrency(r.total),
+                      r.responsible,
+                    ]),
+                    filename: `registros_instituicao_${detailsInstitutionName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`,
+                    orientation: 'landscape',
+                  })
+                }}
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+            </div>
+            <DialogDescription>{detailsTitle}</DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-[65vh] overflow-auto border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Material</TableHead>
+                  <TableHead className="text-right">Qtd</TableHead>
+                  <TableHead className="text-right">Preço Unit.</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead>Responsável</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {detailRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                      Nenhum registro encontrado para este filtro.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  detailRows.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell>{new Date(r.date).toLocaleDateString('pt-BR')}</TableCell>
+                      <TableCell className="font-medium">{r.materialName}</TableCell>
+                      <TableCell className="text-right">{formatQuantity(r.qty)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(r.unitPrice)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(r.total)}</TableCell>
+                      <TableCell>{r.responsible}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AuthLayout>
   )
 }

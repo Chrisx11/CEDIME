@@ -26,24 +26,40 @@ export function useEntries() {
   const fetchEntries = useCallback(async () => {
     try {
       setIsLoading(true)
-      const { data, error } = await supabase
-        .from('entries')
-        .select('*')
-        .order('entry_date', { ascending: false })
-        .order('created_at', { ascending: false })
+      // Evitar limite padrão (~1000) do Supabase/PostgREST buscando em blocos.
+      const chunkSize = 1000
+      let from = 0
+      let all: Entry[] = []
 
-      if (error) {
-        console.error('Erro ao buscar entradas:', error)
-        toast({
-          title: 'Erro',
-          description: 'Não foi possível carregar as entradas.',
-          variant: 'destructive',
-        })
-        return
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const to = from + chunkSize - 1
+        const { data, error } = await supabase
+          .from('entries')
+          .select('*')
+          .order('entry_date', { ascending: false })
+          .order('created_at', { ascending: false })
+          .range(from, to)
+
+        if (error) {
+          console.error('Erro ao buscar entradas:', error)
+          toast({
+            title: 'Erro',
+            description: 'Não foi possível carregar as entradas.',
+            variant: 'destructive',
+          })
+          return
+        }
+
+        const chunk = (data || []) as Entry[]
+        all = all.concat(chunk)
+
+        if (chunk.length < chunkSize) break
+        from += chunkSize
       }
 
-      console.log(`Entradas carregadas: ${data?.length || 0} registros`)
-      setEntries(data || [])
+      console.log(`Entradas carregadas: ${all.length} registros`)
+      setEntries(all)
     } catch (error) {
       console.error('Erro ao buscar entradas:', error)
       toast({

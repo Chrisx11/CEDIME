@@ -1,22 +1,30 @@
 {
   "app": {
-    "[project]/Desktop/CEDIME/app/dashboard/page": [
+    "[project]/Desktop/CEDIME/CEDIME-main/CEDIME-main/app/dashboard/page": [
       "static/media/caa3a2e1cccd8315-s.p.853070df.woff2",
       "static/media/797e433ab948586e-s.p.dbea232f.woff2"
     ],
-    "[project]/Desktop/CEDIME/app/entries/page": [
+    "[project]/Desktop/CEDIME/CEDIME-main/CEDIME-main/app/expenses-institutions/page": [
       "static/media/caa3a2e1cccd8315-s.p.853070df.woff2",
       "static/media/797e433ab948586e-s.p.dbea232f.woff2"
     ],
-    "[project]/Desktop/CEDIME/app/login/page": [
+    "[project]/Desktop/CEDIME/CEDIME-main/CEDIME-main/app/expenses-products/page": [
       "static/media/caa3a2e1cccd8315-s.p.853070df.woff2",
       "static/media/797e433ab948586e-s.p.dbea232f.woff2"
     ],
-    "[project]/Desktop/CEDIME/app/materials/page": [
+    "[project]/Desktop/CEDIME/CEDIME-main/CEDIME-main/app/expenses-suppliers/page": [
       "static/media/caa3a2e1cccd8315-s.p.853070df.woff2",
       "static/media/797e433ab948586e-s.p.dbea232f.woff2"
     ],
-    "[project]/Desktop/CEDIME/app/page": [
+    "[project]/Desktop/CEDIME/CEDIME-main/CEDIME-main/app/login/page": [
+      "static/media/caa3a2e1cccd8315-s.p.853070df.woff2",
+      "static/media/797e433ab948586e-s.p.dbea232f.woff2"
+    ],
+    "[project]/Desktop/CEDIME/CEDIME-main/CEDIME-main/app/outputs/page": [
+      "static/media/caa3a2e1cccd8315-s.p.853070df.woff2",
+      "static/media/797e433ab948586e-s.p.dbea232f.woff2"
+    ],
+    "[project]/Desktop/CEDIME/CEDIME-main/CEDIME-main/app/page": [
       "static/media/caa3a2e1cccd8315-s.p.853070df.woff2",
       "static/media/797e433ab948586e-s.p.dbea232f.woff2"
     ]

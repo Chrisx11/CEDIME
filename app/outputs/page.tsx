@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Output } from '@/lib/data-context'
 import { useOutputs, Output as OutputType } from '@/hooks/use-outputs'
 import { useMaterials } from '@/hooks/use-materials'
@@ -13,6 +13,14 @@ import { useToast } from '@/hooks/use-toast'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Trash2 } from 'lucide-react'
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination'
 
 // Função para converter Output do Supabase para o formato esperado pelos componentes
 function convertOutput(output: OutputType): Output {
@@ -41,13 +49,45 @@ export default function OutputsPage() {
   // Flag para mostrar/ocultar botões temporários
   const SHOW_TEMP_BUTTONS = false
   
-  const { outputs: supabaseOutputs, addOutput, updateOutput, deleteOutput, isLoading, refreshOutputs } = useOutputs()
+  const {
+    outputs: supabaseOutputs,
+    totalCount,
+    page,
+    pageSize,
+    setPage,
+    fetchAll,
+    setFetchAll,
+    addOutput,
+    updateOutput,
+    deleteOutput,
+    isLoading,
+  } = useOutputs()
   const { materials: supabaseMaterials } = useMaterials()
   const { institutions: supabaseInstitutions } = useInstitutions()
   const { toast } = useToast()
   const confirmDialog = useConfirmDialog()
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingOutput, setEditingOutput] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize))
+  const isFiltering = searchQuery.trim().length > 0
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages)
+    }
+  }, [page, totalPages, setPage])
+
+  // Quando estiver filtrando, desabilita paginação e busca tudo (em blocos) para evitar limite.
+  useEffect(() => {
+    if (isFiltering) {
+      if (!fetchAll) setFetchAll(true)
+      if (page !== 1) setPage(1)
+    } else {
+      if (fetchAll) setFetchAll(false)
+    }
+  }, [isFiltering, fetchAll, setFetchAll, page, setPage])
 
   // Converter saídas do Supabase para o formato esperado
   const outputs = useMemo(() => {
@@ -229,11 +269,59 @@ export default function OutputsPage() {
             <p className="text-muted-foreground">Carregando saídas...</p>
           </div>
         ) : (
-          <OutputTable
-            outputs={outputs}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-          />
+          <>
+            <OutputTable
+              outputs={outputs}
+              totalCount={totalCount}
+              searchQuery={searchQuery}
+              onSearchQueryChange={setSearchQuery}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
+
+            {!isFiltering && totalPages > 1 && (
+              <div className="pt-4">
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          setPage(Math.max(1, page - 1))
+                        }}
+                        aria-disabled={page <= 1}
+                        className={page <= 1 ? 'pointer-events-none opacity-50' : undefined}
+                      />
+                    </PaginationItem>
+
+                    <PaginationItem>
+                      <PaginationLink
+                        href="#"
+                        isActive
+                        size="default"
+                        onClick={(e) => e.preventDefault()}
+                      >
+                        Página {page} de {totalPages}
+                      </PaginationLink>
+                    </PaginationItem>
+
+                    <PaginationItem>
+                      <PaginationNext
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          setPage(Math.min(totalPages, page + 1))
+                        }}
+                        aria-disabled={page >= totalPages}
+                        className={page >= totalPages ? 'pointer-events-none opacity-50' : undefined}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            )}
+          </>
         )}
       </div>
 
