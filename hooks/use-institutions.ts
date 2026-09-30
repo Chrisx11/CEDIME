@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { useToast } from '@/hooks/use-toast'
 
 export interface Institution {
@@ -22,10 +23,14 @@ export function useInstitutions() {
   const fetchInstitutions = useCallback(async () => {
     try {
       setIsLoading(true)
-      const { data, error } = await supabase
-        .from('institutions')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const { data, error } = await fetchAllRows<Institution>((from, to) =>
+        supabase
+          .from('institutions')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .range(from, to)
+      )
 
       if (error) {
         console.error('Erro ao buscar instituições:', error)

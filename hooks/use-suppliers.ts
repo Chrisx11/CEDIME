@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { useToast } from '@/hooks/use-toast'
 
 export interface Supplier {
@@ -22,10 +23,14 @@ export function useSuppliers() {
   const fetchSuppliers = useCallback(async () => {
     try {
       setIsLoading(true)
-      const { data, error } = await supabase
-        .from('suppliers')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const { data, error } = await fetchAllRows<Supplier>((from, to) =>
+        supabase
+          .from('suppliers')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .range(from, to)
+      )
 
       if (error) {
         console.error('Erro ao buscar fornecedores:', error)

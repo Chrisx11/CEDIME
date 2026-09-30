@@ -53,7 +53,12 @@ export default function DashboardPage() {
   const { materials, isLoading: isLoadingMaterials } = useMaterials()
   const { requests, isLoading: isLoadingRequests } = useRequests()
   const { entries = [], isLoading: isLoadingEntries } = useEntries()
-  const { outputs = [], isLoading: isLoadingOutputs } = useOutputs()
+  const { outputs = [], isLoading: isLoadingOutputs, setFetchAll, setPage } = useOutputs()
+
+  React.useEffect(() => {
+    setFetchAll(true)
+    setPage(1)
+  }, [setFetchAll, setPage])
 
   const [isLowStockDialogOpen, setIsLowStockDialogOpen] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')

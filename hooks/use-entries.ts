@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { useToast } from '@/hooks/use-toast'
 
 export interface Entry {
@@ -97,10 +98,14 @@ export function useEntries() {
         console.log('Iniciando atualização do material:', materialId)
         
         // Buscar todas as entradas do material
-        const { data: materialEntries, error: entriesError } = await supabase
-          .from('entries')
-          .select('quantity, unit_price')
-          .eq('material_id', materialId)
+        const { data: materialEntries, error: entriesError } = await fetchAllRows<{ quantity: number; unit_price: number }>((from, to) =>
+          supabase
+            .from('entries')
+            .select('quantity, unit_price')
+            .eq('material_id', materialId)
+            .order('id', { ascending: true })
+            .range(from, to)
+        )
 
         if (entriesError) {
           console.error('Erro ao buscar entradas do material:', entriesError)
@@ -112,10 +117,14 @@ export function useEntries() {
         // Buscar todas as saídas do material (se houver tabela de outputs/deliveries)
         let materialOutputs: any[] = []
         try {
-          const { data: outputsData, error: outputsError } = await supabase
-            .from('outputs')
-            .select('quantity')
-            .eq('material_id', materialId)
+          const { data: outputsData, error: outputsError } = await fetchAllRows<{ quantity: number }>((from, to) =>
+            supabase
+              .from('outputs')
+              .select('quantity')
+              .eq('material_id', materialId)
+              .order('id', { ascending: true })
+              .range(from, to)
+          )
           
           if (!outputsError && outputsData) {
             materialOutputs = outputsData

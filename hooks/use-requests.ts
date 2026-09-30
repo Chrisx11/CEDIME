@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { useToast } from '@/hooks/use-toast'
 
 export interface RequestItem {
@@ -35,30 +36,24 @@ export function useRequests() {
     try {
       setIsLoading(true)
 
-      // Buscar requisições já com os itens relacionados
-      const { data, error } = await supabase
-        .from('requests')
-        .select(`
-          id,
-          request_number,
-          institution_id,
-          institution_name,
-          required_date,
-          status,
-          total_value,
-          created_at,
-          updated_at,
-          request_items (
+      const { data, error } = await fetchAllRows<Omit<Request, 'items'>>((from, to) =>
+        supabase
+          .from('requests')
+          .select(`
             id,
-            request_id,
-            material_id,
-            material_name,
-            quantity,
-            unit_price,
-            total
-          )
-        `)
-        .order('created_at', { ascending: false })
+            request_number,
+            institution_id,
+            institution_name,
+            required_date,
+            status,
+            total_value,
+            created_at,
+            updated_at
+          `)
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .range(from, to)
+      )
 
       if (error) {
         console.error('Erro ao buscar requisições (com itens):', error)
@@ -71,13 +66,40 @@ export function useRequests() {
         return
       }
 
-      if (!data || data.length === 0) {
+      if (data.length === 0) {
         setRequests([])
         return
       }
 
-      // Normalizar estrutura para garantir que items exista sempre como array
-      const normalizedRequests: Request[] = data.map((req: any) => ({
+      const { data: itemsData, error: itemsError } = await fetchAllRows<RequestItem>((from, to) =>
+        supabase
+          .from('request_items')
+          .select('id, request_id, material_id, material_name, quantity, unit_price, total')
+          .order('id', { ascending: true })
+          .range(from, to)
+      )
+
+      if (itemsError) {
+        console.error('Erro ao buscar itens das requisições:', itemsError)
+      }
+
+      const itemsByRequest = new Map<string, RequestItem[]>()
+      for (const item of itemsData) {
+        const normalized: RequestItem = {
+          id: item.id,
+          request_id: item.request_id,
+          material_id: item.material_id,
+          material_name: item.material_name,
+          quantity: Number(item.quantity) || 0,
+          unit_price: Number(item.unit_price) || 0,
+          total: Number(item.total) || 0,
+        }
+        const current = itemsByRequest.get(item.request_id) || []
+        current.push(normalized)
+        itemsByRequest.set(item.request_id, current)
+      }
+
+      const normalizedRequests: Request[] = data.map((req) => ({
         id: req.id,
         request_number: req.request_number,
         institution_id: req.institution_id,
@@ -87,17 +109,7 @@ export function useRequests() {
         total_value: Number(req.total_value) || 0,
         created_at: req.created_at,
         updated_at: req.updated_at,
-        items: Array.isArray(req.request_items)
-          ? req.request_items.map((item: any) => ({
-              id: item.id,
-              request_id: item.request_id,
-              material_id: item.material_id,
-              material_name: item.material_name,
-              quantity: Number(item.quantity) || 0,
-              unit_price: Number(item.unit_price) || 0,
-              total: Number(item.total) || 0,
-            }))
-          : [],
+        items: itemsByRequest.get(req.id) || [],
       }))
 
       setRequests(normalizedRequests)

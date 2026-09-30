@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { useToast } from '@/hooks/use-toast'
 
 export interface Category {
@@ -46,10 +47,14 @@ export function CategoriesUnitsProvider({ children }: { children: ReactNode }) {
   const fetchCategories = useCallback(async () => {
     try {
       setIsLoadingCategories(true)
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .order('name', { ascending: true })
+      const { data, error } = await fetchAllRows<Category>((from, to) =>
+        supabase
+          .from('categories')
+          .select('*')
+          .order('name', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to)
+      )
 
       if (error) {
         console.error('Erro ao buscar categorias:', error)
@@ -77,10 +82,14 @@ export function CategoriesUnitsProvider({ children }: { children: ReactNode }) {
   const fetchUnits = useCallback(async () => {
     try {
       setIsLoadingUnits(true)
-      const { data, error } = await supabase
-        .from('units')
-        .select('*')
-        .order('name', { ascending: true })
+      const { data, error } = await fetchAllRows<Unit>((from, to) =>
+        supabase
+          .from('units')
+          .select('*')
+          .order('name', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to)
+      )
 
       if (error) {
         console.error('Erro ao buscar unidades:', error)

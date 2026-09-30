@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx'
 import { createClient } from '@/lib/supabase/client'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 
 // Mapeamento de abreviações para unidades completas
 const unitMapping: Record<string, string> = {
@@ -130,9 +131,13 @@ export async function importMaterialsFromExcel(
 
     // Buscar todas as unidades existentes
     onProgress?.(10, 'Buscando unidades existentes...')
-    const { data: existingUnits, error: unitsError } = await supabase
-      .from('units')
-      .select('name')
+    const { data: existingUnits, error: unitsError } = await fetchAllRows<{ name: string }>((from, to) =>
+      supabase
+        .from('units')
+        .select('name')
+        .order('id', { ascending: true })
+        .range(from, to)
+    )
     
     if (unitsError) {
       throw new Error(`Erro ao buscar unidades: ${unitsError.message}`)

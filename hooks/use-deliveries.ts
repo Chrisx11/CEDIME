@@ -35,42 +35,70 @@ export function useDeliveries() {
   const fetchDeliveries = useCallback(async () => {
     try {
       setIsLoading(true)
-      
-      // Buscar entregas
-      const { data: deliveriesData, error: deliveriesError } = await supabase
-        .from('deliveries')
-        .select('*')
-        .order('created_at', { ascending: false })
 
-      if (deliveriesError) {
-        console.error('Erro ao buscar entregas:', deliveriesError)
-        toast({
-          title: 'Erro',
-          description: 'Não foi possível carregar as entregas.',
-          variant: 'destructive',
-        })
-        return
-      }
+      const chunkSize = 1000
+      const deliveriesData: Delivery[] = []
+      let deliveriesFrom = 0
 
-      // Buscar itens das entregas
-      if (deliveriesData && deliveriesData.length > 0) {
-        const deliveryIds = deliveriesData.map(d => d.id)
-        const { data: itemsData, error: itemsError } = await supabase
-          .from('delivery_items')
+      // O PostgREST devolve no máximo 1000 linhas por consulta.
+      while (true) {
+        const { data, error: deliveriesError } = await supabase
+          .from('deliveries')
           .select('*')
-          .in('delivery_id', deliveryIds)
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .range(deliveriesFrom, deliveriesFrom + chunkSize - 1)
 
-        if (itemsError) {
-          console.error('Erro ao buscar itens das entregas:', itemsError)
+        if (deliveriesError) {
+          console.error('Erro ao buscar entregas:', deliveriesError)
+          toast({
+            title: 'Erro',
+            description: 'Não foi possível carregar as entregas.',
+            variant: 'destructive',
+          })
+          return
         }
 
-        // Associar itens às entregas
-        const deliveriesWithItems = deliveriesData.map(delivery => ({
-          ...delivery,
-          items: itemsData?.filter(item => item.delivery_id === delivery.id) || []
-        }))
+        const chunk = (data || []) as Delivery[]
+        deliveriesData.push(...chunk)
+        if (chunk.length < chunkSize) break
+        deliveriesFrom += chunkSize
+      }
 
-        setDeliveries(deliveriesWithItems)
+      if (deliveriesData.length > 0) {
+        const itemsData: DeliveryItem[] = []
+        let itemsFrom = 0
+
+        while (true) {
+          const { data, error: itemsError } = await supabase
+            .from('delivery_items')
+            .select('*')
+            .order('created_at', { ascending: true })
+            .order('id', { ascending: true })
+            .range(itemsFrom, itemsFrom + chunkSize - 1)
+
+          if (itemsError) {
+            console.error('Erro ao buscar itens das entregas:', itemsError)
+            break
+          }
+
+          const chunk = (data || []) as DeliveryItem[]
+          itemsData.push(...chunk)
+          if (chunk.length < chunkSize) break
+          itemsFrom += chunkSize
+        }
+
+        const itemsByDelivery = new Map<string, DeliveryItem[]>()
+        for (const item of itemsData) {
+          const current = itemsByDelivery.get(item.delivery_id) || []
+          current.push(item)
+          itemsByDelivery.set(item.delivery_id, current)
+        }
+
+        setDeliveries(deliveriesData.map(delivery => ({
+          ...delivery,
+          items: itemsByDelivery.get(delivery.id) || []
+        })))
       } else {
         setDeliveries([])
       }

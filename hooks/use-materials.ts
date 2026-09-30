@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { useToast } from '@/hooks/use-toast'
 
 type MaterialUpdatedDetail = {
@@ -33,11 +34,14 @@ export function useMaterials() {
   const fetchMaterials = useCallback(async () => {
     try {
       setIsLoading(true)
-      // Adicionar timestamp para evitar cache
-      const { data, error } = await supabase
-        .from('materials')
-        .select('*')
-        .order('name', { ascending: true })
+      const { data, error } = await fetchAllRows<Material>((from, to) =>
+        supabase
+          .from('materials')
+          .select('*')
+          .order('name', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to)
+      )
 
       if (error) {
         console.error('Erro ao buscar materiais:', error)
